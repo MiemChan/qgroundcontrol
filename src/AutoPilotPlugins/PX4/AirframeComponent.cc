@@ -69,7 +69,7 @@ static size_t cMavTypes = sizeof(mavTypeInfo) / sizeof(mavTypeInfo[0]);
 #endif
 
 AirframeComponent::AirframeComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent) :
-    PX4Component(vehicle, autopilot, parent),
+    VehicleComponent(vehicle, autopilot, parent),
     _name(tr("Airframe"))
 {
 #if 0
@@ -127,7 +127,7 @@ QString AirframeComponent::name(void) const
 QString AirframeComponent::description(void) const
 {
     return tr("The Airframe Component is used to select the airframe which matches your vehicle. "
-              "This will in turn set up the various tuning values for flight paramters.");
+              "This will in turn set up the various tuning values for flight parameters.");
 }
 
 QString AirframeComponent::iconResource(void) const

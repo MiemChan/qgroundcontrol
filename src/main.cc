@@ -35,6 +35,8 @@ This file is part of the QGROUNDCONTROL project
 
 #include "QGCApplication.h"
 
+#define  SINGLE_INSTANCE_PORT   14499
+
 #ifndef __mobile__
     #include "QGCSerialPortInfo.h"
 #endif
@@ -119,6 +121,16 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved)
 int main(int argc, char *argv[])
 {
 
+#ifndef __mobile__
+    //-- Test for another instance already running. If that's the case, we simply exit.
+    QHostAddress host("127.0.0.1");
+    QUdpSocket socket;
+    if(!socket.bind(host, SINGLE_INSTANCE_PORT, QAbstractSocket::DontShareAddress)) {
+        qWarning() << "Another instance already running. Exiting.";
+        exit(-1);
+    }
+#endif
+
 #ifdef Q_OS_MAC
 #ifndef __ios__
     // Prevent Apple's app nap from screwing us over
@@ -127,9 +139,25 @@ int main(int argc, char *argv[])
 #endif
 #endif
 
-    // install the message handler
 #ifdef Q_OS_WIN
+    // install the message handler
     qInstallMessageHandler(msgHandler);
+
+    // Set our own OpenGL buglist
+    qputenv("QT_OPENGL_BUGLIST", ":/opengl/resources/opengl/buglist.json");
+
+    // Allow for command line override of renderer
+    for (int i = 0; i < argc; i++) {
+        const QString arg(argv[i]);
+        if (arg == QStringLiteral("-angle")) {
+            QCoreApplication::setAttribute(Qt::AA_UseOpenGLES);
+            break;
+        } else if (arg == QStringLiteral("-swrast")) {
+            QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+            break;
+        }
+    }
+
 #endif
 
     // The following calls to qRegisterMetaType are done to silence debug output which warns

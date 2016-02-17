@@ -51,6 +51,7 @@ FactMetaData::FactMetaData(QObject* parent)
     , _minIsDefaultForType(true)
     , _rawTranslator(_defaultTranslator)
     , _cookedTranslator(_defaultTranslator)
+    , _rebootRequired(false)
 {
 
 }
@@ -68,6 +69,7 @@ FactMetaData::FactMetaData(ValueType_t type, QObject* parent)
     , _minIsDefaultForType(true)
     , _rawTranslator(_defaultTranslator)
     , _cookedTranslator(_defaultTranslator)
+    , _rebootRequired(false)
 {
 
 }
@@ -100,6 +102,7 @@ const FactMetaData& FactMetaData::operator=(const FactMetaData& other)
     _cookedUnits            = other._cookedUnits;
     _rawTranslator          = other._rawTranslator;
     _cookedTranslator       = other._cookedTranslator;
+    _rebootRequired         = other._rebootRequired;
 
     return *this;
 }
@@ -394,4 +397,40 @@ void FactMetaData::setRawUnits(const QString& rawUnits)
     _cookedUnits = rawUnits;
 
     _setBuiltInTranslator();
+}
+
+FactMetaData::ValueType_t FactMetaData::stringToType(const QString& typeString, bool& unknownType)
+{
+    QStringList         knownTypeStrings;
+    QList<ValueType_t>  knownTypes;
+
+    unknownType = false;
+
+    knownTypeStrings << QStringLiteral("Uint8")
+                        << QStringLiteral("Int8")
+                        << QStringLiteral("Uint16")
+                        << QStringLiteral("Int16")
+                        << QStringLiteral("Uint32")
+                        << QStringLiteral("Int32")
+                        << QStringLiteral("Float")
+                        << QStringLiteral("Double");
+
+    knownTypes << valueTypeUint8
+                << valueTypeInt8
+                << valueTypeUint16
+                << valueTypeInt16
+                << valueTypeUint32
+                << valueTypeInt32
+                << valueTypeFloat
+                << valueTypeDouble;
+
+    for (int i=0; i<knownTypeStrings.count(); i++) {
+        if (knownTypeStrings[i].compare(typeString, Qt::CaseInsensitive) == 0) {
+            return knownTypes[i];
+        }
+    }
+
+    unknownType = true;
+
+    return valueTypeDouble;
 }

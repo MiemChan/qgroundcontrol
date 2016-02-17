@@ -78,6 +78,13 @@ QVariant PX4ParameterMetaData::_stringToTypedVariant(const QString& string, Fact
     return var;
 }
 
+QString PX4ParameterMetaData::parameterMetaDataFile(void)
+{
+    QSettings settings;
+    QDir parameterDir = QFileInfo(settings.fileName()).dir();
+    return parameterDir.filePath("PX4ParameterFactMetaData.xml");
+}
+
 /// Load Parameter Fact meta data
 ///
 /// The meta data comes from firmware parameters.xml file.
@@ -97,9 +104,7 @@ void PX4ParameterMetaData::_loadParameterFactMetaData(void)
     // We want unit test builds to always use the resource based meta data to provide repeatable results
     if (!qgcApp()->runningUnitTests()) {
         // First look for meta data that comes from a firmware download. Fall back to resource if not there.
-        QSettings settings;
-        QDir parameterDir = QFileInfo(settings.fileName()).dir();
-        parameterFilename = parameterDir.filePath("PX4ParameterFactMetaData.xml");
+        parameterFilename = parameterMetaDataFile();
     }
 	if (parameterFilename.isEmpty() || !QFile(parameterFilename).exists()) {
 		parameterFilename = ":/AutoPilotPlugins/PX4/ParameterFactMetaData.xml";
@@ -193,30 +198,9 @@ void PX4ParameterMetaData::_loadParameterFactMetaData(void)
                 qCDebug(PX4ParameterMetaDataLog) << "Found parameter name:" << name << " type:" << type << " default:" << strDefault;
 
                 // Convert type from string to FactMetaData::ValueType_t
-                
-                struct String2Type {
-                    const char*                 strType;
-                    FactMetaData::ValueType_t   type;
-                };
-                
-                static const struct String2Type rgString2Type[] = {
-                    { "FLOAT",  FactMetaData::valueTypeFloat },
-                    { "INT32",  FactMetaData::valueTypeInt32 },
-                };
-                static const size_t crgString2Type = sizeof(rgString2Type) / sizeof(rgString2Type[0]);
-                
-                bool found = false;
-                FactMetaData::ValueType_t foundType;
-                for (size_t i=0; i<crgString2Type; i++) {
-                    const struct String2Type* info = &rgString2Type[i];
-                    
-                    if (type == info->strType) {
-                        found = true;
-                        foundType = info->type;
-                        break;
-                    }
-                }
-                if (!found) {
+                bool unknownType;
+                FactMetaData::ValueType_t foundType = FactMetaData::stringToType(type, unknownType);
+                if (unknownType) {
                     qWarning() << "Parameter meta data with bad type:" << type << " name:" << name;
                     return;
                 }
@@ -312,6 +296,32 @@ void PX4ParameterMetaData::_loadParameterFactMetaData(void)
                             qCWarning(PX4ParameterMetaDataLog) << "Invalid decimals value, name:" << metaData->name() << " type:" << metaData->type() << " decimals:" << text << " error: invalid number";
                         }
 
+                    } else if (elementName == "reboot_required") {
+                        Q_ASSERT(metaData);
+                        QString text = xml.readElementText();
+                        qCDebug(PX4ParameterMetaDataLog) << "RebootRequired:" << text;
+                        if (text.compare("true", Qt::CaseInsensitive) == 0) {
+                            metaData->setRebootRequired(true);
+                        }
+
+                    } else if (elementName == "values") {
+                        // doing nothing individual value will follow anyway. May be used for sanity checking.
+
+                    } else if (elementName == "value") {
+                        QString enumValueStr = xml.attributes().value("code").toString();
+                        QString enumString = xml.readElementText();
+                        qCDebug(PX4ParameterMetaDataLog) << "parameter value:"
+                                                         << "value desc:" << enumString << "code:" << enumValueStr;
+
+                        QVariant    enumValue;
+                        QString     errorString;
+                        if (metaData->convertAndValidateRaw(enumValueStr, false /* validate */, enumValue, errorString)) {
+                            metaData->addEnumInfo(enumString, enumValue);
+                        } else {
+                            qCDebug(PX4ParameterMetaDataLog) << "Invalid enum value, name:" << metaData->name()
+                                                             << " type:" << metaData->type() << " value:" << enumValueStr
+                                                             << " error:" << errorString;
+                        }
                     } else {
                         qDebug() << "Unknown element in XML: " << elementName;
                     }

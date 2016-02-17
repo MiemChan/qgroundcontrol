@@ -39,6 +39,8 @@
 
 QGC_LOGGING_CATEGORY(LogDownloadLog, "LogDownloadLog")
 
+static QLocale kLocale;
+
 //----------------------------------------------------------------------------------------
 LogDownloadData::LogDownloadData(QGCLogEntry* entry_)
     : ID(entry_->id())
@@ -49,7 +51,7 @@ LogDownloadData::LogDownloadData(QGCLogEntry* entry_)
 }
 
 //----------------------------------------------------------------------------------------
-QGCLogEntry:: QGCLogEntry(uint logId, const QDateTime& dateTime, uint logSize, bool received)
+QGCLogEntry::QGCLogEntry(uint logId, const QDateTime& dateTime, uint logSize, bool received)
     : _logID(logId)
     , _logSize(logSize)
     , _logTimeUTC(dateTime)
@@ -57,6 +59,13 @@ QGCLogEntry:: QGCLogEntry(uint logId, const QDateTime& dateTime, uint logSize, b
     , _selected(false)
 {
     _status = "Pending";
+}
+
+//----------------------------------------------------------------------------------------
+QString
+QGCLogEntry::sizeStr() const
+{
+    return kLocale.toString(_logSize);
 }
 
 //----------------------------------------------------------------------------------------
@@ -275,7 +284,8 @@ LogDownloadController::_logData(UASInterface* uas, uint32_t ofs, uint16_t id, ui
             if(_downloadData->file.write((const char*)data, count)) {
                 _downloadData->written += count;
                 //-- Update status
-                _downloadData->entry->setStatus(QString::number(_downloadData->written));
+                QString comma_value = kLocale.toString(_downloadData->written);
+                _downloadData->entry->setStatus(comma_value);
                 result = true;
                 //-- reset retries
                 _retries = 0;
@@ -326,8 +336,7 @@ LogDownloadController::_receivedAllData()
         _requestLogData(_downloadData->ID, 0, _downloadData->entry->size());
     } else {
         _resetSelection();
-        _downloadingLogs = false;
-        emit downloadingLogsChanged();
+        _setDownloading(false);
     }
 }
 
@@ -390,7 +399,7 @@ LogDownloadController::_requestLogData(uint8_t id, uint32_t offset, uint32_t cou
             &msg,
             qgcApp()->toolbox()->multiVehicleManager()->activeVehicle()->id(), MAV_COMP_ID_ALL,
             id, offset, count);
-        _vehicle->sendMessage(msg);
+        _vehicle->sendMessageOnLink(_vehicle->priorityLink(), msg);
     }
 }
 
@@ -419,7 +428,7 @@ LogDownloadController::_requestLogList(uint32_t start, uint32_t end)
             MAV_COMP_ID_ALL,
             start,
             end);
-        _vehicle->sendMessage(msg);
+        _vehicle->sendMessageOnLink(_vehicle->priorityLink(), msg);
         //-- Wait 2 seconds before bitching about not getting anything
         _timer.start(2000);
     }
@@ -456,8 +465,7 @@ LogDownloadController::download(void)
             }
         }
         //-- Start download process
-        _downloadingLogs = true;
-        emit downloadingLogsChanged();
+        _setDownloading(true);
         _receivedAllData();
     }
 }
@@ -547,6 +555,15 @@ LogDownloadController::_prepareLogDownload()
 
 //----------------------------------------------------------------------------------------
 void
+LogDownloadController::_setDownloading(bool active)
+{
+    _downloadingLogs = active;
+    _vehicle->setConnectionLostEnabled(!active);
+    emit downloadingLogsChanged();
+}
+
+//----------------------------------------------------------------------------------------
+void
 LogDownloadController::eraseAll(void)
 {
     if(_vehicle && _uas) {
@@ -556,7 +573,7 @@ LogDownloadController::eraseAll(void)
             qgcApp()->toolbox()->mavlinkProtocol()->getComponentId(),
             &msg,
             qgcApp()->toolbox()->multiVehicleManager()->activeVehicle()->id(), MAV_COMP_ID_ALL);
-        _vehicle->sendMessage(msg);
+        _vehicle->sendMessageOnLink(_vehicle->priorityLink(), msg);
         refresh();
     }
 }
@@ -577,8 +594,7 @@ LogDownloadController::cancel(void)
         _downloadData = 0;
     }
     _resetSelection(true);
-    _downloadingLogs = false;
-    emit downloadingLogsChanged();
+    _setDownloading(false);
 }
 
 //-----------------------------------------------------------------------------

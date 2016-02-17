@@ -33,7 +33,6 @@ UASQuickView::UASQuickView(QWidget *parent) : QWidget(parent),
     {
         valueEnabled("altitudeAMSL");
         valueEnabled("altitudeAMSLFT");
-        valueEnabled("altitudeWGS84");
         valueEnabled("altitudeRelative");
         valueEnabled("groundSpeed");
         valueEnabled("distToWaypoint");
@@ -41,7 +40,7 @@ UASQuickView::UASQuickView(QWidget *parent) : QWidget(parent),
 
     QAction *action = new QAction("Add/Remove Items",this);
     action->setCheckable(false);
-    connect(action,&QAction::triggered,this, static_cast<void (UASQuickView::*)(bool)>(&UASQuickView::actionTriggered));
+    connect(action,&QAction::triggered,this, &UASQuickView::addActionTriggered);
     this->addAction(action);
 
     QAction *columnaction = new QAction("Set Column Count",this);
@@ -75,7 +74,7 @@ void UASQuickView::columnActionTriggered()
     saveSettings();
 }
 
-void UASQuickView::actionTriggered()
+void UASQuickView::addActionTriggered()
 {
     if (quickViewSelectDialog)
     {
@@ -161,7 +160,7 @@ void UASQuickView::sortItems(int columncount)
         m_PropertyToLayoutIndexMap.remove(i.key());
         itemlist.append(i.value());
     }
-    // Item list has all the widgets availble, now re-add them to the layouts.
+    // Item list has all the widgets available, now re-add them to the layouts.
     for (int i = 0; i < m_verticalLayoutList.size(); i++)
     {
         ui.horizontalLayout->removeItem(m_verticalLayoutList[i]);

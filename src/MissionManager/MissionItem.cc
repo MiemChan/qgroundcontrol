@@ -26,6 +26,7 @@ This file is part of the QGROUNDCONTROL project
 #include "MissionItem.h"
 #include "FirmwarePluginManager.h"
 #include "QGCApplication.h"
+#include "JsonHelper.h"
 
 QGC_LOGGING_CATEGORY(MissionItemLog, "MissionItemLog")
 
@@ -37,6 +38,18 @@ FactMetaData* MissionItem::_defaultParamMetaData =      NULL;
 FactMetaData* MissionItem::_frameMetaData =             NULL;
 FactMetaData* MissionItem::_latitudeMetaData =          NULL;
 FactMetaData* MissionItem::_longitudeMetaData =         NULL;
+
+const char*  MissionItem::_itemType =               "missionItem";
+const char*  MissionItem::_jsonTypeKey =            "type";
+const char*  MissionItem::_jsonIdKey =              "id";
+const char*  MissionItem::_jsonFrameKey =           "frame";
+const char*  MissionItem::_jsonCommandKey =         "command";
+const char*  MissionItem::_jsonParam1Key =          "param1";
+const char*  MissionItem::_jsonParam2Key =          "param2";
+const char*  MissionItem::_jsonParam3Key =          "param3";
+const char*  MissionItem::_jsonParam4Key =          "param4";
+const char*  MissionItem::_jsonAutoContinueKey =    "autoContinue";
+const char*  MissionItem::_jsonCoordinateKey =      "coordinate";
 
 struct EnumInfo_s {
     const char *    label;
@@ -74,8 +87,9 @@ QDebug operator<<(QDebug dbg, const MissionItem* missionItem)
     return dbg;
 }
 
-MissionItem::MissionItem(QObject* parent)
+MissionItem::MissionItem(Vehicle* vehicle, QObject* parent)
     : QObject(parent)
+    , _vehicle(vehicle)
     , _rawEdit(false)
     , _dirty(false)
     , _sequenceNumber(0)
@@ -85,7 +99,7 @@ MissionItem::MissionItem(QObject* parent)
     , _azimuth(0.0)
     , _distance(0.0)
     , _homePositionSpecialCase(false)
-    , _homePositionValid(false)
+    , _showHomePosition(false)
     , _altitudeRelativeToHomeFact   (0, "Altitude is relative to home", FactMetaData::valueTypeUint32)
     , _autoContinueFact             (0, "AutoContinue",                 FactMetaData::valueTypeUint32)
     , _commandFact                  (0, "",                             FactMetaData::valueTypeUint32)
@@ -107,7 +121,7 @@ MissionItem::MissionItem(QObject* parent)
     , _param7MetaData(FactMetaData::valueTypeDouble)
     , _syncingAltitudeRelativeToHomeAndFrame    (false)
     , _syncingHeadingDegreesAndParam4           (false)
-    , _mavCmdInfoMap(qgcApp()->toolbox()->missionCommands()->commandInfoMap())
+    , _missionCommands(qgcApp()->toolbox()->missionCommands())
 {
     // Need a good command and frame before we start passing signals around
     _commandFact.setRawValue(MAV_CMD_NAV_WAYPOINT);
@@ -121,7 +135,8 @@ MissionItem::MissionItem(QObject* parent)
     setDefaultsForCommand();
 }
 
-MissionItem::MissionItem(int             sequenceNumber,
+MissionItem::MissionItem(Vehicle*       vehicle,
+                         int             sequenceNumber,
                          MAV_CMD         command,
                          MAV_FRAME       frame,
                          double          param1,
@@ -135,6 +150,7 @@ MissionItem::MissionItem(int             sequenceNumber,
                          bool            isCurrentItem,
                          QObject*        parent)
     : QObject(parent)
+    , _vehicle(vehicle)
     , _rawEdit(false)
     , _dirty(false)
     , _sequenceNumber(sequenceNumber)
@@ -144,7 +160,7 @@ MissionItem::MissionItem(int             sequenceNumber,
     , _azimuth(0.0)
     , _distance(0.0)
     , _homePositionSpecialCase(false)
-    , _homePositionValid(false)
+    , _showHomePosition(false)
     , _altitudeRelativeToHomeFact   (0, "Altitude is relative to home", FactMetaData::valueTypeUint32)
     , _commandFact                  (0, "",                             FactMetaData::valueTypeUint32)
     , _frameFact                    (0, "",                             FactMetaData::valueTypeUint32)
@@ -165,7 +181,7 @@ MissionItem::MissionItem(int             sequenceNumber,
     , _param7MetaData(FactMetaData::valueTypeDouble)
     , _syncingAltitudeRelativeToHomeAndFrame    (false)
     , _syncingHeadingDegreesAndParam4           (false)
-    , _mavCmdInfoMap(qgcApp()->toolbox()->missionCommands()->commandInfoMap())
+    , _missionCommands(qgcApp()->toolbox()->missionCommands())
 {
     // Need a good command and frame before we start passing signals around
     _commandFact.setRawValue(MAV_CMD_NAV_WAYPOINT);
@@ -192,6 +208,7 @@ MissionItem::MissionItem(int             sequenceNumber,
 
 MissionItem::MissionItem(const MissionItem& other, QObject* parent)
     : QObject(parent)
+    , _vehicle(NULL)
     , _rawEdit(false)
     , _dirty(false)
     , _sequenceNumber(0)
@@ -201,7 +218,7 @@ MissionItem::MissionItem(const MissionItem& other, QObject* parent)
     , _azimuth(0.0)
     , _distance(0.0)
     , _homePositionSpecialCase(false)
-    , _homePositionValid(false)
+    , _showHomePosition(false)
     , _altitudeRelativeToHomeFact   (0, "Altitude is relative to home", FactMetaData::valueTypeUint32)
     , _commandFact                  (0, "",                             FactMetaData::valueTypeUint32)
     , _frameFact                    (0, "",                             FactMetaData::valueTypeUint32)
@@ -219,7 +236,7 @@ MissionItem::MissionItem(const MissionItem& other, QObject* parent)
     , _param4MetaData(FactMetaData::valueTypeDouble)
     , _syncingAltitudeRelativeToHomeAndFrame    (false)
     , _syncingHeadingDegreesAndParam4           (false)
-    , _mavCmdInfoMap(qgcApp()->toolbox()->missionCommands()->commandInfoMap())
+    , _missionCommands(qgcApp()->toolbox()->missionCommands())
 {
     // Need a good command and frame before we start passing signals around
     _commandFact.setRawValue(MAV_CMD_NAV_WAYPOINT);
@@ -234,6 +251,8 @@ MissionItem::MissionItem(const MissionItem& other, QObject* parent)
 
 const MissionItem& MissionItem::operator=(const MissionItem& other)
 {
+    _vehicle = other._vehicle;
+
     setCommand(other.command());
     setFrame(other.frame());
     setRawEdit(other._rawEdit);
@@ -246,7 +265,7 @@ const MissionItem& MissionItem::operator=(const MissionItem& other)
     setAzimuth(other._azimuth);
     setDistance(other._distance);
     setHomePositionSpecialCase(other._homePositionSpecialCase);
-    setHomePositionValid(other._homePositionValid);
+    setShowHomePosition(other._showHomePosition);
 
     _syncFrameToAltitudeRelativeToHome();
 
@@ -314,7 +333,8 @@ void MissionItem::_setupMetaData(void)
 
         enumStrings.clear();
         enumValues.clear();
-        foreach (const MavCmdInfo* mavCmdInfo, _mavCmdInfoMap) {
+        foreach (const MAV_CMD command, _missionCommands->commandsIds()) {
+            const MavCmdInfo* mavCmdInfo = _missionCommands->getMavCmdInfo(command, _vehicle);
             enumStrings.append(mavCmdInfo->rawName());
             enumValues.append(QVariant(mavCmdInfo->command()));
         }
@@ -353,22 +373,21 @@ MissionItem::~MissionItem()
 {    
 }
 
-void MissionItem::save(QTextStream &saveStream)
+void MissionItem::save(QJsonObject& json)
 {
-    // FORMAT: <INDEX> <CURRENT WP> <COORD FRAME> <COMMAND> <PARAM1> <PARAM2> <PARAM3> <PARAM4> <PARAM5/X/LONGITUDE> <PARAM6/Y/LATITUDE> <PARAM7/Z/ALTITUDE> <autoContinue> <DESCRIPTION>
-    // as documented here: http://qgroundcontrol.org/waypoint_protocol
-    saveStream << sequenceNumber() << "\t"
-               << isCurrentItem() << "\t"
-               << frame() << "\t"
-               << command() << "\t"
-               << QString("%1").arg(param1(), 0, 'g', 18) << "\t"
-               << QString("%1").arg(param2(), 0, 'g', 18) << "\t"
-               << QString("%1").arg(param3(), 0, 'g', 18) << "\t"
-               << QString("%1").arg(param4(), 0, 'g', 18) << "\t"
-               << QString("%1").arg(param5(), 0, 'g', 18) << "\t"
-               << QString("%1").arg(param6(), 0, 'g', 18) << "\t"
-               << QString("%1").arg(param7(), 0, 'g', 18) << "\t"
-               << this->autoContinue() << "\r\n";
+    json[_jsonTypeKey] = _itemType;
+    json[_jsonIdKey] = sequenceNumber();
+    json[_jsonFrameKey] = frame();
+    json[_jsonCommandKey] = command();
+    json[_jsonParam1Key] = param1();
+    json[_jsonParam2Key] = param2();
+    json[_jsonParam3Key] = param3();
+    json[_jsonParam4Key] = param4();
+    json[_jsonAutoContinueKey] = autoContinue();
+
+    QJsonArray coordinateArray;
+    coordinateArray << param5() << param6() << param7();
+    json[_jsonCoordinateKey] = coordinateArray;
 }
 
 bool MissionItem::load(QTextStream &loadStream)
@@ -389,7 +408,43 @@ bool MissionItem::load(QTextStream &loadStream)
         setAutoContinue(wpParams[11].toInt() == 1 ? true : false);
         return true;
     }
+
     return false;
+}
+
+bool MissionItem::load(const QJsonObject& json, QString& errorString)
+{
+    QStringList requiredKeys;
+
+    requiredKeys << _jsonTypeKey << _jsonIdKey << _jsonFrameKey << _jsonCommandKey <<
+                    _jsonParam1Key << _jsonParam2Key << _jsonParam3Key << _jsonParam4Key <<
+                    _jsonAutoContinueKey << _jsonCoordinateKey;
+    if (!JsonHelper::validateRequiredKeys(json, requiredKeys, errorString)) {
+        return false;
+    }
+
+    if (json[_jsonTypeKey] != _itemType) {
+        errorString = QString("type found: %1 must be: %2").arg(json[_jsonTypeKey].toString()).arg(_itemType);
+        return false;
+    }
+
+    QGeoCoordinate coordinate;
+    if (!JsonHelper::toQGeoCoordinate(json[_jsonCoordinateKey], coordinate, true /* altitudeRequired */, errorString)) {
+        return false;
+    }
+    setCoordinate(coordinate);
+
+    setIsCurrentItem(false);
+    setSequenceNumber(json[_jsonIdKey].toInt());
+    setFrame((MAV_FRAME)json[_jsonFrameKey].toInt());
+    setCommand((MAV_CMD)json[_jsonCommandKey].toInt());
+    setParam1(json[_jsonParam1Key].toDouble());
+    setParam2(json[_jsonParam2Key].toDouble());
+    setParam3(json[_jsonParam3Key].toDouble());
+    setParam4(json[_jsonParam4Key].toDouble());
+    setAutoContinue(json[_jsonAutoContinueKey].toBool());
+
+    return true;
 }
 
 
@@ -488,8 +543,8 @@ void MissionItem::setParam7(double param)
 
 bool MissionItem::standaloneCoordinate(void) const
 {
-    if (_mavCmdInfoMap.contains((MAV_CMD)command())) {
-        return _mavCmdInfoMap[(MAV_CMD)command()]->standaloneCoordinate();
+    if (_missionCommands->contains((MAV_CMD)command())) {
+        return _missionCommands->getMavCmdInfo((MAV_CMD)command(), _vehicle)->standaloneCoordinate();
     } else {
         return false;
     }
@@ -497,8 +552,8 @@ bool MissionItem::standaloneCoordinate(void) const
 
 bool MissionItem::specifiesCoordinate(void) const
 {
-    if (_mavCmdInfoMap.contains((MAV_CMD)command())) {
-        return _mavCmdInfoMap[(MAV_CMD)command()]->specifiesCoordinate();
+    if (_missionCommands->contains((MAV_CMD)command())) {
+        return _missionCommands->getMavCmdInfo((MAV_CMD)command(), _vehicle)->specifiesCoordinate();
     } else {
         return false;
     }
@@ -506,8 +561,8 @@ bool MissionItem::specifiesCoordinate(void) const
 
 QString MissionItem::commandDescription(void) const
 {
-    if (_mavCmdInfoMap.contains((MAV_CMD)command())) {
-        return _mavCmdInfoMap[(MAV_CMD)command()]->description();
+    if (_missionCommands->contains((MAV_CMD)command())) {
+        return _missionCommands->getMavCmdInfo((MAV_CMD)command(), _vehicle)->description();
     } else {
         qWarning() << "Should not ask for command description on unknown command";
         return QString();
@@ -555,13 +610,18 @@ QmlObjectListModel* MissionItem::textFieldFacts(void)
     } else {
         _clearParamMetaData();
 
-        MAV_CMD command = (MAV_CMD)this->command();
+        MAV_CMD command;
+        if (_homePositionSpecialCase) {
+            command = MAV_CMD_NAV_LAST;
+        } else {
+            command = (MAV_CMD)this->command();
+        }
 
         Fact*           rgParamFacts[7] =       { &_param1Fact, &_param2Fact, &_param3Fact, &_param4Fact, &_param5Fact, &_param6Fact, &_param7Fact };
         FactMetaData*   rgParamMetaData[7] =    { &_param1MetaData, &_param2MetaData, &_param3MetaData, &_param4MetaData, &_param5MetaData, &_param6MetaData, &_param7MetaData };
 
         for (int i=1; i<=7; i++) {
-            const QMap<int, MavCmdParamInfo*>& paramInfoMap = _mavCmdInfoMap[command]->paramInfoMap();
+            const QMap<int, MavCmdParamInfo*>& paramInfoMap = _missionCommands->getMavCmdInfo(command, _vehicle)->paramInfoMap();
 
             if (paramInfoMap.contains(i) && paramInfoMap[i]->enumStrings().count() == 0) {
                 Fact*               paramFact =     rgParamFacts[i-1];
@@ -594,7 +654,7 @@ QmlObjectListModel* MissionItem::checkboxFacts(void)
 
     if (rawEdit()) {
         model->append(&_autoContinueFact);
-    } else if (specifiesCoordinate()) {
+    } else if (specifiesCoordinate() && !_homePositionSpecialCase) {
         model->append(&_altitudeRelativeToHomeFact);
     }
 
@@ -612,10 +672,15 @@ QmlObjectListModel* MissionItem::comboboxFacts(void)
         Fact*           rgParamFacts[7] =       { &_param1Fact, &_param2Fact, &_param3Fact, &_param4Fact, &_param5Fact, &_param6Fact, &_param7Fact };
         FactMetaData*   rgParamMetaData[7] =    { &_param1MetaData, &_param2MetaData, &_param3MetaData, &_param4MetaData, &_param5MetaData, &_param6MetaData, &_param7MetaData };
 
-        MAV_CMD command = (MAV_CMD)this->command();
+        MAV_CMD command;
+        if (_homePositionSpecialCase) {
+            command = MAV_CMD_NAV_LAST;
+        } else {
+            command = (MAV_CMD)this->command();
+        }
 
         for (int i=1; i<=7; i++) {
-            const QMap<int, MavCmdParamInfo*>& paramInfoMap = _mavCmdInfoMap[command]->paramInfoMap();
+            const QMap<int, MavCmdParamInfo*>& paramInfoMap = _missionCommands->getMavCmdInfo(command, _vehicle)->paramInfoMap();
 
             if (paramInfoMap.contains(i) && paramInfoMap[i]->enumStrings().count() != 0) {
                 Fact*               paramFact =     rgParamFacts[i-1];
@@ -649,16 +714,16 @@ void MissionItem::setCoordinate(const QGeoCoordinate& coordinate)
 
 bool MissionItem::friendlyEditAllowed(void) const
 {
-    if (_mavCmdInfoMap.contains((MAV_CMD)command()) && _mavCmdInfoMap[(MAV_CMD)command()]->friendlyEdit()) {
+    if (_missionCommands->contains((MAV_CMD)command()) && _missionCommands->getMavCmdInfo((MAV_CMD)command(), _vehicle)->friendlyEdit()) {
         if (!autoContinue()) {
             return false;
         }
 
         if (specifiesCoordinate()) {
             return frame() == MAV_FRAME_GLOBAL || frame() == MAV_FRAME_GLOBAL_RELATIVE_ALT;
-        } else {
-            return frame() == MAV_FRAME_MISSION;
         }
+
+        return true;
     }
 
     return false;
@@ -692,12 +757,6 @@ void MissionItem::setDirty(bool dirty)
 void MissionItem::_setDirtyFromSignal(void)
 {
     setDirty(true);
-}
-
-void MissionItem::setHomePositionValid(bool homePositionValid)
-{
-    _homePositionValid = homePositionValid;
-    emit homePositionValidChanged(_homePositionValid);
 }
 
 void MissionItem::setDistance(double distance)
@@ -752,12 +811,20 @@ void MissionItem::setDefaultsForCommand(void)
     // We set these global defaults first, then if there are param defaults they will get reset
     setParam7(defaultAltitude);
 
-    if (_mavCmdInfoMap.contains((MAV_CMD)command())) {
-        foreach (const MavCmdParamInfo* paramInfo, _mavCmdInfoMap[(MAV_CMD)command()]->paramInfoMap()) {
+    MAV_CMD command = (MAV_CMD)this->command();
+    if (_missionCommands->contains(command)) {
+        MavCmdInfo* mavCmdInfo = _missionCommands->getMavCmdInfo(command, _vehicle);
+        foreach (const MavCmdParamInfo* paramInfo, mavCmdInfo->paramInfoMap()) {
             Fact* rgParamFacts[7] = { &_param1Fact, &_param2Fact, &_param3Fact, &_param4Fact, &_param5Fact, &_param6Fact, &_param7Fact };
 
             rgParamFacts[paramInfo->param()-1]->setRawValue(paramInfo->defaultValue());
         }
+    }
+
+    if (command == MAV_CMD_NAV_WAYPOINT) {
+        // We default all acceptance radius to 0. This allows flight controller to be in control of
+        // accept radius.
+        setParam2(0);
     }
 
     setAutoContinue(true);
@@ -782,11 +849,12 @@ void MissionItem::_sendCommandChanged(void)
 
 QString MissionItem::commandName(void) const
 {
-    if (_mavCmdInfoMap.contains((MAV_CMD)command())) {
-        const MavCmdInfo* mavCmdInfo = _mavCmdInfoMap[(MAV_CMD)command()];
+    MAV_CMD command = (MAV_CMD)this->command();
+    if (_missionCommands->contains(command)) {
+        const MavCmdInfo* mavCmdInfo = _missionCommands->getMavCmdInfo(command, _vehicle);
         return mavCmdInfo->friendlyName().isEmpty() ? mavCmdInfo->rawName() : mavCmdInfo->friendlyName();
     } else {
-        return QString("Unknown: %1").arg(command());
+        return QString("Unknown: %1").arg(command);
     }
 }
 
@@ -798,4 +866,12 @@ void MissionItem::_sendFriendlyEditAllowedChanged(void)
 QString MissionItem::category(void) const
 {
     return qgcApp()->toolbox()->missionCommands()->categoryFromCommand(command());
+}
+
+void MissionItem::setShowHomePosition(bool showHomePosition)
+{
+    if (showHomePosition != _showHomePosition) {
+        _showHomePosition = showHomePosition;
+        emit showHomePositionChanged(_showHomePosition);
+    }
 }

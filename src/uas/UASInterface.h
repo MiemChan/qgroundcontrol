@@ -253,10 +253,8 @@ signals:
      * @param seconds estimated remaining flight time in seconds
      */
     void batteryChanged(UASInterface* uas, double voltage, double current, double percent, int seconds);
-    void batteryConsumedChanged(UASInterface* uas, double current_consumed);
     void statusChanged(UASInterface* uas, QString status);
     void thrustChanged(UASInterface*, double thrust);
-    void heartbeat(UASInterface* uas);
     void attitudeChanged(UASInterface*, double roll, double pitch, double yaw, quint64 usec);
     void attitudeChanged(UASInterface*, int component, double roll, double pitch, double yaw, quint64 usec);
     void attitudeRotationRatesChanged(int uas, double rollrate, double pitchrate, double yawrate, quint64 usec);
@@ -265,8 +263,8 @@ signals:
     void positionSetPointsChanged(int uasid, float xDesired, float yDesired, float zDesired, float yawDesired, quint64 usec);
     /** @brief A user (or an autonomous mission or obstacle avoidance planner) requested to set a new setpoint */
     void userPositionSetPointsChanged(int uasid, float xDesired, float yDesired, float zDesired, float yawDesired);
-    void globalPositionChanged(UASInterface*, double lat, double lon, double altAMSL, double altWGS84, quint64 usec);
-    void altitudeChanged(UASInterface*, double altitudeAMSL, double altitudeWGS84, double altitudeRelative, double climbRate, quint64 usec);
+    void globalPositionChanged(UASInterface*, double lat, double lon, double altAMSL, quint64 usec);
+    void altitudeChanged(UASInterface*, double altitudeAMSL, double altitudeRelative, double climbRate, quint64 usec);
     /** @brief Update the status of one satellite used for localization */
     void gpsSatelliteStatusChanged(int uasid, int satid, float azimuth, float direction, float snr, bool used);
 
@@ -313,8 +311,6 @@ signals:
     void localizationChanged(UASInterface* uas, int fix);
 
     // ERROR AND STATUS SIGNALS
-    /** @brief Heartbeat timed out or was regained */
-    void heartbeatTimeout(bool timeout, unsigned int ms);
     /** @brief Name of system changed */
     void nameChanged(QString newName);
     /** @brief Core specifications have changed */
@@ -327,11 +323,8 @@ signals:
     void logEntry   (UASInterface* uas, uint32_t time_utc, uint32_t size, uint16_t id, uint16_t num_logs, uint16_t last_log_num);
     void logData    (UASInterface* uas, uint32_t ofs, uint16_t id, uint8_t count, const uint8_t* data);
 
-protected:
-
-    // TIMEOUT CONSTANTS
-    static const unsigned int timeoutIntervalHeartbeat = 3500 * 1000; ///< Heartbeat timeout is 3.5 seconds
-
+    /** @brief Command Ack */
+    void commandAck (UASInterface* uas, uint8_t compID, uint16_t command, uint8_t result);
 };
 
 Q_DECLARE_INTERFACE(UASInterface, "org.qgroundcontrol/1.0")

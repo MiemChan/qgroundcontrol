@@ -120,8 +120,14 @@ Rectangle {
         target: multiVehicleManager
 
         onParameterReadyVehicleAvailableChanged: {
-            summaryButton.checked = true
-            showSummaryPanel()
+            if (parameterReadyVehicleAvailable || summaryButton.checked || setupButtonGroup.current != firmwareButton) {
+                // Show/Reload the Summary panel when:
+                //      A new vehicle shows up
+                //      The summary panel is already showing and the active vehicle goes away
+                //      The active vehicle goes away and we are not on the Firmware panel.
+                summaryButton.checked = true
+                showSummaryPanel()
+            }
         }
     }
 
@@ -211,16 +217,13 @@ Rectangle {
         anchors.right:      parent.right
         color:              qgcPal.window
 
-        Flickable {
+        QGCFlickable {
             id:                 buttonScroll
             width:              buttonColumn.width
             anchors.topMargin:  _defaultTextHeight / 2
             anchors.top:        parent.top
             anchors.bottom:     parent.bottom
-            clip:               true
             contentHeight:      buttonColumn.height
-            contentWidth:       buttonColumn.width
-            boundsBehavior:     Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
 
             Column {

@@ -42,7 +42,6 @@ QGroundControlQmlGlobal::QGroundControlQmlGlobal(QGCApplication* app)
     , _virtualTabletJoystick(false)
     , _offlineEditingFirmwareTypeFact(QString(), "OfflineEditingFirmwareType", FactMetaData::valueTypeUint32, (uint32_t)MAV_AUTOPILOT_ARDUPILOTMEGA)
     , _offlineEditingFirmwareTypeMetaData(FactMetaData::valueTypeUint32)
-
 {
     QSettings settings;
     _virtualTabletJoystick = settings.value(_virtualTabletJoystickKey, false). toBool();
@@ -50,7 +49,7 @@ QGroundControlQmlGlobal::QGroundControlQmlGlobal(QGCApplication* app)
     QStringList     firmwareEnumStrings;
     QVariantList    firmwareEnumValues;
 
-    firmwareEnumStrings << "APM Flight Stack" << "PX4 Flight Stack" << "Mavlink Generic Flight Stack";
+    firmwareEnumStrings << "ArduPilot Flight Stack" << "PX4 Flight Stack" << "Mavlink Generic Flight Stack";
     firmwareEnumValues << QVariant::fromValue((uint32_t)MAV_AUTOPILOT_ARDUPILOTMEGA) << QVariant::fromValue((uint32_t)MAV_AUTOPILOT_PX4) << QVariant::fromValue((uint32_t)MAV_AUTOPILOT_GENERIC);
 
     _offlineEditingFirmwareTypeMetaData.setEnumInfo(firmwareEnumStrings, firmwareEnumValues);
@@ -177,12 +176,6 @@ void QGroundControlQmlGlobal::setIsSaveLogPromptNotArmed(bool prompt)
 {
     qgcApp()->setPromptFlightDataSaveNotArmed(prompt);
     emit isSaveLogPromptNotArmedChanged(prompt);
-}
-
-void QGroundControlQmlGlobal::setIsHeartBeatEnabled(bool enable)
-{
-    qgcApp()->toolbox()->mavlinkProtocol()->enableHeartbeats(enable);
-    emit isHeartBeatEnabledChanged(enable);
 }
 
 void QGroundControlQmlGlobal::setIsMultiplexingEnabled(bool enable)

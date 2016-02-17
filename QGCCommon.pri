@@ -19,7 +19,7 @@
 
 #
 # This file contains configuration settings which are common to both the QGC Application and
-# the Location Plugin. It should mainly contains intial CONFIG tag setup and compiler settings.
+# the Location Plugin. It should mainly contains initial CONFIG tag setup and compiler settings.
 #
 
 # Setup our supported build types. We do this once here and then use the defined config scopes
@@ -89,12 +89,19 @@ MobileBuild {
 
 exists ($$PWD/.git) {
   GIT_DESCRIBE = $$system(git --git-dir $$PWD/.git --work-tree $$PWD describe --always --tags)
-  message(QGroundControl version $${GIT_DESCRIBE})
+  GIT_HASH     = $$system(git rev-parse HEAD)
+  VERSION      = $$replace(GIT_DESCRIBE, "v", "")
+  VERSION      = $$replace(VERSION, "-", ".")
+  VERSION      = $$section(VERSION, ".", 0, 3)
+  message(QGroundControl version $${GIT_DESCRIBE} hash $${GIT_HASH})
 } else {
   GIT_DESCRIBE = None
+  GIT_HASH = None
+  VERSION = 0.0.0   # Marker to indicate out-of-tree build
 }
 
-DEFINES += GIT_VERSION=\"\\\"$$GIT_DESCRIBE\\\"\"
+DEFINES += GIT_TAG=\"\\\"$$GIT_DESCRIBE\\\"\"
+DEFINES += GIT_HASH=\"\\\"$$GIT_HASH\\\"\"
 
 # Installer configuration
 

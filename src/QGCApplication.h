@@ -121,6 +121,9 @@ public:
     /// Do we have Bluetooth Support?
     bool isBluetoothAvailable() { return _bluetoothAvailable; }
 
+    QGeoCoordinate lastKnownHomePosition(void) { return _lastKnownHomePosition; }
+    void setLastKnownHomePosition(QGeoCoordinate& lastKnownHomePosition);
+
 public slots:
     /// You can connect to this slot to show an information message box from a different thread.
     void informationMessageBoxOnMainThread(const QString& title, const QString& msg);
@@ -135,7 +138,7 @@ public slots:
     void showPlanView(void);
     void showSetupView(void);
 
-    void showWindowCloseMessage(void);
+    void qmlAttemptWindowClose(void);
 
 #ifndef __mobile__
     /// Save the specified Flight Data Log
@@ -184,12 +187,6 @@ private:
     QQmlApplicationEngine* _qmlAppEngine;
 #endif
 
-    static const char* _settingsVersionKey;             ///< Settings key which hold settings version
-    static const char* _deleteAllSettingsKey;           ///< If this settings key is set on boot, all settings will be deleted
-    static const char* _promptFlightDataSave;           ///< Settings key for promptFlightDataSave
-    static const char* _promptFlightDataSaveNotArmed;   ///< Settings key for promptFlightDataSaveNotArmed
-    static const char* _styleKey;                       ///< Settings key for UI style
-
     bool _runningUnitTests; ///< true: running unit tests, false: normal app
 
     static const char*  _darkStyleFile;
@@ -209,6 +206,17 @@ private:
     QGCToolbox* _toolbox;
 
     bool _bluetoothAvailable;
+
+    QGeoCoordinate _lastKnownHomePosition;    ///< Map position when all other sources fail
+
+    static const char* _settingsVersionKey;             ///< Settings key which hold settings version
+    static const char* _deleteAllSettingsKey;           ///< If this settings key is set on boot, all settings will be deleted
+    static const char* _promptFlightDataSave;           ///< Settings key for promptFlightDataSave
+    static const char* _promptFlightDataSaveNotArmed;   ///< Settings key for promptFlightDataSaveNotArmed
+    static const char* _styleKey;                       ///< Settings key for UI style
+    static const char* _lastKnownHomePositionLatKey;
+    static const char* _lastKnownHomePositionLonKey;
+    static const char* _lastKnownHomePositionAltKey;
 
     /// Unit Test have access to creating and destroying singletons
     friend class UnitTest;

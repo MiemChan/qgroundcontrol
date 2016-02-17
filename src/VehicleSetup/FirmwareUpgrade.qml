@@ -43,11 +43,11 @@ QGCView {
     readonly property string highlightPrefix:   "<font color=\"" + qgcPal.warningText + "\">"
     readonly property string highlightSuffix:   "</font>"
     readonly property string welcomeText:       "QGroundControl can upgrade the firmware on Pixhawk devices, 3DR Radios and PX4 Flow Smart Cameras."
-    readonly property string plugInText:        highlightPrefix + "Plug in your device" + highlightSuffix + " via USB to " + highlightPrefix + "start" + highlightSuffix + " firmware upgrade. " +
-                                                "Make sure to connect " + highlightPrefix + "directly" + highlightSuffix + " to a powered USB port on your computer, not through a USB hub."
-    readonly property string qgcDisconnectText: "All QGroundControl connections to vehicles must be disconnected prior to firmware upgrade."
-    property string usbUnplugText:              "Device must be disconnected from USB to start firmware upgrade. " +
-                                                    highlightPrefix + "Disconnect {0}" + highlightSuffix + " from usb."
+    readonly property string plugInText:        "<big>" + highlightPrefix + "Plug in your device" + highlightSuffix + " via USB to " + highlightPrefix + "start" + highlightSuffix + " firmware upgrade.</big>"
+    readonly property string flashFailText:     "If upgrade failed, make sure to connect " + highlightPrefix + "directly" + highlightSuffix + " to a powered USB port on your computer, not through a USB hub. " +
+                                                "Also make sure you are only powered via USB " + highlightPrefix + "not battery" + highlightSuffix + "."
+    readonly property string qgcUnplugText1:    "All QGroundControl connections to vehicles must be " + highlightPrefix + " disconnected " + highlightSuffix + "prior to firmware upgrade."
+    readonly property string qgcUnplugText2:    highlightPrefix + "<big>Please unplug your Pixhawk and/or Radio from USB.</big>" + highlightSuffix
 
     property string firmwareWarningMessage
     property bool   controllerCompleted:      false
@@ -58,7 +58,6 @@ QGCView {
         statusTextArea.append(highlightPrefix + "Upgrade cancelled" + highlightSuffix)
         statusTextArea.append("------------------------------------------")
         controller.cancel()
-        flashCompleteWaitTimer.running = true
     }
 
     QGCPalette { id: qgcPal; colorGroupEnabled: panel.enabled }
@@ -101,11 +100,9 @@ QGCView {
         onBoardFound: {
             if (initialBoardSearch) {
                 // Board was found right away, so something is already plugged in before we've started upgrade
-                if (QGroundControl.multiVehicleManager.activeVehicleAvailable) {
-                    statusTextArea.append(qgcDisconnectText)
-                } else {
-                    statusTextArea.append(usbUnplugText.replace('{0}', controller.boardType))
-                }
+                statusTextArea.append(qgcUnplugText1)
+                statusTextArea.append(qgcUnplugText2)
+                multiVehicleManager.activeVehicle.autoDisconnect = true
             } else {
                 // We end up here when we detect a board plugged in after we've started upgrade
                 statusTextArea.append(highlightPrefix + "Found device" + highlightSuffix + ": " + controller.boardType)
@@ -117,31 +114,13 @@ QGCView {
 
         onError: {
             hideDialog()
-            flashCompleteWaitTimer.running = true
+            statusTextArea.append(flashFailText)
         }
-
-        onFlashComplete: flashCompleteWaitTimer.running = true
     }
 
     onCompleted: {
         if (controllerCompleted) {
             // We can only start the board search when the Qml and Controller are completely done loading
-            controller.startBoardSearch()
-        }
-    }
-
-    // After a flash completes we start this timer to trigger resetting the ui back to it's initial state of being ready to
-    // flash another board. We do this only after the timer triggers to leave the results of the previous flash on the screen
-    // for a small amount amount of time.
-
-    Timer {
-        id:         flashCompleteWaitTimer
-        interval:   15000
-
-        onTriggered: {
-            initialBoardSearch = true
-            progressBar.value = 0
-            statusTextArea.append(welcomeText)
             controller.startBoardSearch()
         }
     }
@@ -171,8 +150,8 @@ QGCView {
             }
 
             function reject() {
-                cancelFlash()
                 hideDialog()
+                cancelFlash()
             }
 
             ExclusiveGroup {
@@ -247,7 +226,7 @@ QGCView {
                 QGCRadioButton {
                     id:             apmFlightStack
                     exclusiveGroup: firmwareGroup
-                    text:           "APM Flight Stack"
+                    text:           "ArduPilot Flight Stack"
                     visible:        !px4Flow
 
                     onClicked: parent.firmwareVersionChanged(firmwareTypeList)
@@ -283,7 +262,7 @@ QGCView {
                                         "This firmware has NOT BEEN FLIGHT TESTED. " +
                                         "It is only intended for DEVELOPERS. " +
                                         "Run bench tests without props first. " +
-                                        "Do NOT fly this without addional safety precautions. " +
+                                        "Do NOT fly this without additonal safety precautions. " +
                                         "Follow the mailing list actively when using it."
                             } else {
                                 firmwareVersionWarningLabel.visible = false

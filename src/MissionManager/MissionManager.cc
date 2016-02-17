@@ -34,10 +34,12 @@ QGC_LOGGING_CATEGORY(MissionManagerLog, "MissionManagerLog")
 
 MissionManager::MissionManager(Vehicle* vehicle)
     : _vehicle(vehicle)
+    , _dedicatedLink(NULL)
     , _ackTimeoutTimer(NULL)
     , _retryAck(AckNone)
     , _readTransactionInProgress(false)
     , _writeTransactionInProgress(false)
+    , _currentMissionItem(-1)
 {
     connect(_vehicle, &Vehicle::mavlinkMessageReceived, this, &MissionManager::_mavlinkMessageReceived);
     
@@ -98,7 +100,8 @@ void MissionManager::writeMissionItems(const QmlObjectListModel& missionItems)
 
     mavlink_msg_mission_count_encode(qgcApp()->toolbox()->mavlinkProtocol()->getSystemId(), qgcApp()->toolbox()->mavlinkProtocol()->getComponentId(), &message, &missionCount);
 
-    _vehicle->sendMessage(message);
+    _dedicatedLink = _vehicle->priorityLink();
+    _vehicle->sendMessageOnLink(_dedicatedLink, message);
     _startAckTimeout(AckMissionRequest);
     emit inProgressChanged(true);
 }
@@ -120,7 +123,8 @@ void MissionManager::requestMissionItems(void)
     
     mavlink_msg_mission_request_list_encode(qgcApp()->toolbox()->mavlinkProtocol()->getSystemId(), qgcApp()->toolbox()->mavlinkProtocol()->getComponentId(), &message, &request);
     
-    _vehicle->sendMessage(message);
+    _dedicatedLink = _vehicle->priorityLink();
+    _vehicle->sendMessageOnLink(_dedicatedLink, message);
     _startAckTimeout(AckMissionCount);
     emit inProgressChanged(true);
 }
@@ -180,10 +184,10 @@ void MissionManager::_readTransactionComplete(void)
     
     mavlink_msg_mission_ack_encode(qgcApp()->toolbox()->mavlinkProtocol()->getSystemId(), qgcApp()->toolbox()->mavlinkProtocol()->getComponentId(), &message, &missionAck);
     
-    _vehicle->sendMessage(message);
-    
-    emit newMissionItemsAvailable();
+    _vehicle->sendMessageOnLink(_dedicatedLink, message);
+
     _finishTransaction(true);
+    emit newMissionItemsAvailable();
 }
 
 void MissionManager::_handleMissionCount(const mavlink_message_t& message)
@@ -228,7 +232,7 @@ void MissionManager::_requestNextMissionItem(void)
     
     mavlink_msg_mission_request_encode(qgcApp()->toolbox()->mavlinkProtocol()->getSystemId(), qgcApp()->toolbox()->mavlinkProtocol()->getComponentId(), &message, &missionRequest);
     
-    _vehicle->sendMessage(message);
+    _vehicle->sendMessageOnLink(_dedicatedLink, message);
     _startAckTimeout(AckMissionItem);
 }
 
@@ -248,7 +252,8 @@ void MissionManager::_handleMissionItem(const mavlink_message_t& message)
         _requestItemRetryCount = 0;
         _itemIndicesToRead.removeOne(missionItem.seq);
 
-        MissionItem* item = new MissionItem(missionItem.seq,
+        MissionItem* item = new MissionItem(_vehicle,
+                                            missionItem.seq,
                                             (MAV_CMD)missionItem.command,
                                             (MAV_FRAME)missionItem.frame,
                                             missionItem.param1,
@@ -261,6 +266,12 @@ void MissionManager::_handleMissionItem(const mavlink_message_t& message)
                                             missionItem.autocontinue,
                                             missionItem.current,
                                             this);
+
+        if (item->command() == MavlinkQmlSingleton::MAV_CMD_DO_JUMP) {
+            // Home is in position 0
+            item->setParam1((int)item->param1() + 1);
+        }
+
         _missionItems.append(item);
     } else {
         qCDebug(MissionManagerLog) << "_handleMissionItem mission item received item index which was not requested, disregrarding:" << missionItem.seq;
@@ -330,7 +341,7 @@ void MissionManager::_handleMissionRequest(const mavlink_message_t& message)
     
     mavlink_msg_mission_item_encode(qgcApp()->toolbox()->mavlinkProtocol()->getSystemId(), qgcApp()->toolbox()->mavlinkProtocol()->getComponentId(), &messageOut, &missionItem);
     
-    _vehicle->sendMessage(messageOut);
+    _vehicle->sendMessageOnLink(_dedicatedLink, messageOut);
     _startAckTimeout(AckMissionRequest);
 }
 
@@ -411,7 +422,7 @@ void MissionManager::_mavlinkMessageReceived(const mavlink_message_t& message)
             break;
             
         case MAVLINK_MSG_ID_MISSION_CURRENT:
-            // FIXME: NYI
+            _handleMissionCurrent(message);
             break;
     }
 }
@@ -524,4 +535,17 @@ void MissionManager::_finishTransaction(bool success)
 bool MissionManager::inProgress(void)
 {
     return _readTransactionInProgress || _writeTransactionInProgress;
+}
+
+void MissionManager::_handleMissionCurrent(const mavlink_message_t& message)
+{
+    mavlink_mission_current_t missionCurrent;
+
+    mavlink_msg_mission_current_decode(&message, &missionCurrent);
+
+    qCDebug(MissionManagerLog) << "_handleMissionCurrent seq:" << missionCurrent.seq;
+    if (missionCurrent.seq != _currentMissionItem) {
+        _currentMissionItem = missionCurrent.seq;
+        emit currentItemChanged(_currentMissionItem);
+    }
 }

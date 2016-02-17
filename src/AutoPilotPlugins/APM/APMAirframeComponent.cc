@@ -28,7 +28,7 @@
 #include "ArduCopterFirmwarePlugin.h"
 
 APMAirframeComponent::APMAirframeComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent)
-    : APMComponent(vehicle, autopilot, parent)
+    : VehicleComponent(vehicle, autopilot, parent)
     , _requiresFrameSetup(false)
     , _name("Airframe")
 {
@@ -49,12 +49,12 @@ QString APMAirframeComponent::name(void) const
 QString APMAirframeComponent::description(void) const
 {
     return tr("The Airframe Component is used to select the airframe which matches your vehicle. "
-              "This will in turn set up the various tuning values for flight paramters.");
+              "This will in turn set up the various tuning values for flight parameters.");
 }
 
 QString APMAirframeComponent::iconResource(void) const
 {
-    return "/qmlimages/AirframeComponentIcon.png";
+    return QStringLiteral("/qmlimages/AirframeComponentIcon.png");
 }
 
 bool APMAirframeComponent::requiresSetup(void) const
@@ -65,7 +65,7 @@ bool APMAirframeComponent::requiresSetup(void) const
 bool APMAirframeComponent::setupComplete(void) const
 {
     if (_requiresFrameSetup) {
-        return _autopilot->getParameterFact(FactSystem::defaultComponentId, "FRAME")->rawValue().toInt() >= 0;
+        return _autopilot->getParameterFact(FactSystem::defaultComponentId, QStringLiteral("FRAME"))->rawValue().toInt() >= 0;
     } else {
         return true;
     }
@@ -76,7 +76,7 @@ QStringList APMAirframeComponent::setupCompleteChangedTriggerList(void) const
     QStringList list;
 
     if (_requiresFrameSetup) {
-        list << "FRAME";
+        list << QStringLiteral("FRAME");
     }
 
     return list;
@@ -85,7 +85,7 @@ QStringList APMAirframeComponent::setupCompleteChangedTriggerList(void) const
 QUrl APMAirframeComponent::setupSource(void) const
 {
     if (_requiresFrameSetup) {
-        return QUrl::fromUserInput("qrc:/qml/APMAirframeComponent.qml");
+        return QUrl::fromUserInput(QStringLiteral("qrc:/qml/APMAirframeComponent.qml"));
     } else {
         return QUrl();
     }
@@ -94,7 +94,7 @@ QUrl APMAirframeComponent::setupSource(void) const
 QUrl APMAirframeComponent::summaryQmlSource(void) const
 {
     if (_requiresFrameSetup) {
-        return QUrl::fromUserInput("qrc:/qml/APMAirframeComponentSummary.qml");
+        return QUrl::fromUserInput(QStringLiteral("qrc:/qml/APMAirframeComponentSummary.qml"));
     } else {
         return QUrl();
     }

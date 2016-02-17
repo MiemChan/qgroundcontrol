@@ -52,12 +52,15 @@ public:
     ParameterLoader(AutoPilotPlugin* autopilot, Vehicle* vehicle, QObject* parent = NULL);
     
     ~ParameterLoader();
+
+    /// @return Location of parameter cache file
+    static QString parameterCacheFile(void);
     
     /// Returns true if the full set of facts are ready
     bool parametersAreReady(void) { return _parametersReady; }
 
     /// Re-request the full set of parameters from the autopilot
-    void refreshAllParameters(void);
+    void refreshAllParameters(uint8_t componentID = MAV_COMP_ID_ALL);
 
     /// Request a refresh on the specific parameter
     void refreshParameter(int componentId, const QString& name);
@@ -73,7 +76,7 @@ public:
 	QStringList parameterNames(int componentId);
     
     /// Returns the specified Fact.
-    /// WARNING: Will assert if parameter does not exists. If that possibily exists, check for existince first with
+    /// WARNING: Will assert if parameter does not exists. If that possibily exists, check for existence first with
     /// parameterExists.
     Fact* getFact(int               componentId,    ///< fact component, -1=default component
                   const QString&    name);          ///< fact name
@@ -107,6 +110,9 @@ protected:
     void _tryCacheLookup(void);
     void _initialRequestTimeout(void);
     
+private slots:
+    void _timeoutRefreshAll();
+
 private:
     static QVariant _stringToTypedVariant(const QString& string, FactMetaData::ValueType_t type, bool failOk = false);
     int _actualComponentId(int componentId);
@@ -133,6 +139,7 @@ private:
     
     bool _parametersReady;      ///< true: full set of parameters correctly loaded
     bool _initialLoadComplete;  ///< true: Initial load of all parameters complete, whether succesful or not
+    bool _saveRequired;         ///< true: _saveToEEPROM should be called
     int _defaultComponentId;
     QString _defaultComponentIdParam;
     

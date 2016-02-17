@@ -65,5 +65,15 @@ FactSliderPanel {
             max:            1.0
             step:           0.1
         }
+
+        ListElement {
+            title:          "Manual minimum throttle"
+            description:    "Slide to the left to start the motors with less idle power. Slide to the right if descending in manual flight becomes unstable."
+            param:          "MPC_MANTHR_MIN"
+            min:            0
+            max:            0.15
+            step:           0.01
+        }
+
     }
 }

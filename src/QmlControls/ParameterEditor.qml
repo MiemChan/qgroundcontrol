@@ -166,7 +166,7 @@ QGCView {
         Row {
             spacing: ScreenTools.defaultFontPixelWidth * 0.5
             //-- Parameter Groups
-            Flickable {
+            QGCFlickable {
                 id :                groupScroll
                 width:              ScreenTools.defaultFontPixelWidth * 25
                 height:             parent.height
@@ -174,7 +174,6 @@ QGCView {
                 pixelAligned:       true
                 contentHeight:      groupedViewComponentColumn.height
                 contentWidth:       groupedViewComponentColumn.width
-                boundsBehavior:     Flickable.OvershootBounds
                 flickableDirection: Flickable.VerticalFlick
                 Column {
                     id: groupedViewComponentColumn
@@ -200,12 +199,15 @@ QGCView {
                                     exclusiveGroup: setupButtonGroup
                                     onClicked: {
                                         checked = true
-                                        factRowsLoader.sourceComponent  = null
+                                        // Clear the rows from the component first. This allows us to change the componentId without
+                                        // breaking any bindings.
+                                        factRowsLoader.parameterNames   = [ ]
                                         _rowWidth                       = 10
                                         factRowsLoader.componentId      = componentId
                                         factRowsLoader.parameterNames   = controller.getParametersForGroup(componentId, modelData)
-                                        factRowsLoader.sourceComponent  = factRowsComponent
                                         _currentGroup                   = modelData
+                                        factScrollView.contentX         = 0
+                                        factScrollView.contentY         = 0
                                     }
                                 }
                             }
@@ -220,7 +222,7 @@ QGCView {
                 opacity:    0.1
             }
             //-- Parameters
-            Flickable {
+            QGCFlickable {
                 id:             factScrollView
                 width:          parent.width - groupScroll.width
                 height:         parent.height
@@ -247,7 +249,7 @@ QGCView {
     Component {
         id: searchResultsViewComponent
         Item {
-            Flickable {
+            QGCFlickable {
                 id:             factScrollView
                 width:          parent.width
                 height:         parent.height
@@ -287,12 +289,14 @@ QGCView {
                             id:     nameLabel
                             width:  ScreenTools.defaultFontPixelWidth  * 20
                             text:   factRow.modelFact.name
+                            clip:   true
                         }
                         QGCLabel {
                             id:     valueLabel
                             width:  ScreenTools.defaultFontPixelWidth  * 20
                             color:  factRow.modelFact.defaultValueAvailable ? (factRow.modelFact.valueEqualsDefault ? __qgcPal.text : __qgcPal.warningText) : __qgcPal.text
                             text:   factRow.modelFact.enumStrings.length == 0 ? factRow.modelFact.valueString + " " + factRow.modelFact.units : factRow.modelFact.enumStringValue
+                            clip:   true
                         }
                         QGCLabel {
                             text:   factRow.modelFact.shortDescription

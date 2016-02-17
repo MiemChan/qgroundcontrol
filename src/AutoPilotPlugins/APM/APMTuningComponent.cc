@@ -26,7 +26,7 @@
 #include "APMAirframeComponent.h"
 
 APMTuningComponent::APMTuningComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent)
-    : APMComponent(vehicle, autopilot, parent)
+    : VehicleComponent(vehicle, autopilot, parent)
     , _name("Tuning")
 {
 }
@@ -43,7 +43,7 @@ QString APMTuningComponent::description(void) const
 
 QString APMTuningComponent::iconResource(void) const
 {
-    return "/qmlimages/TuningComponentIcon.png";
+    return QStringLiteral("/qmlimages/TuningComponentIcon.png");
 }
 
 bool APMTuningComponent::requiresSetup(void) const
@@ -72,7 +72,10 @@ QUrl APMTuningComponent::setupSource(void) const
         case MAV_TYPE_HEXAROTOR:
         case MAV_TYPE_OCTOROTOR:
         case MAV_TYPE_TRICOPTER:
-            qmlFile = "qrc:/qml/APMTuningComponentCopter.qml";
+            // Older firmwares do not have CH9_OPT, we don't support Tuning on older firmwares
+            if (_autopilot->parameterExists(-1, QStringLiteral("CH9_OPT"))) {
+                qmlFile = QStringLiteral("qrc:/qml/APMTuningComponentCopter.qml");
+            }
             break;
         default:
             // No tuning panel

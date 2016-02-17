@@ -35,8 +35,10 @@ QGCView {
     id:         rootQGCView
     viewPanel:  panel
 
-    property real _margins: ScreenTools.defaultFontPixelHeight
-    property bool _channelOptionsAvailable: controller.parameterExists(-1, "CH7_OPT")   // Not available in all firmware types
+    property real   _margins:                   ScreenTools.defaultFontPixelHeight
+    property bool   _channel7OptionsAvailable:  controller.parameterExists(-1, "CH7_OPT")   // Not available in all firmware types
+    property bool   _channel9OptionsAvailable:  controller.parameterExists(-1, "CH9_OPT")   // Not available in all firmware types
+    property int    _channelOptionCount:         _channel7OptionsAvailable ? (_channel9OptionsAvailable ? 6 : 2) : 0
 
     QGCPalette { id: qgcPal; colorGroupEnabled: panel.enabled }
 
@@ -49,10 +51,9 @@ QGCView {
         id:             panel
         anchors.fill:   parent
 
-        Flickable {
+        QGCFlickable {
             anchors.fill:       parent
             clip:               true
-            boundsBehavior:     Flickable.StopAtBounds
             flickableDirection: Flickable.VerticalFlick
             contentHeight:      flightModeSettings.y + flightModeSettings.height
 
@@ -117,7 +118,7 @@ QGCView {
                 anchors.left:       flightModeSettings.right
                 text:               "Channel Options"
                 font.weight:        Font.DemiBold
-                visible:            _channelOptionsAvailable
+                visible:            _channelOptionCount != 0
             }
 
             Rectangle {
@@ -128,7 +129,7 @@ QGCView {
                 width:              channelOptColumn.width + (_margins * 2)
                 height:             channelOptColumn.height + ScreenTools.defaultFontPixelHeight
                 color:              qgcPal.windowShade
-                visible:            _channelOptionsAvailable
+                visible:            _channelOptionCount != 0
 
                 Column {
                     id:                 channelOptColumn
@@ -138,7 +139,7 @@ QGCView {
                     spacing:            ScreenTools.defaultFontPixelHeight
 
                     Repeater {
-                        model: 6
+                        model: _channelOptionCount
 
                         Row {
                             spacing: ScreenTools.defaultFontPixelWidth
@@ -155,13 +156,13 @@ QGCView {
                             FactComboBox {
                                 id:         optCombo
                                 width:      ScreenTools.defaultFontPixelWidth * 15
-                                fact:       _channelOptionsAvailable ? controller.getParameterFact(-1, "CH" + index + "_OPT") : nullFact
+                                fact:       controller.getParameterFact(-1, "CH" + index + "_OPT")
                                 indexModel: false
                             }
                         }
                     } // Repeater -- Channel options
                 } // Column - Channel options
             } // Rectangle - Channel options
-        } // FLickable
+        } // QGCFlickable
     } // QGCViewPanel
 } // QGCView

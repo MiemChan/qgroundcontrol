@@ -36,10 +36,6 @@ QGCView {
 
     property real _margins: ScreenTools.defaultFontPixelHeight
 
-    function numberWithCommas(x) {
-        return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",").replace(/,,/g, ",");
-    }
-
     LogDownloadController {
         id:         controller
         factPanel:  panel
@@ -72,7 +68,7 @@ QGCView {
 
             TableViewColumn {
                 title: "Id"
-                width: ScreenTools.defaultFontPixelWidth * 4
+                width: ScreenTools.defaultFontPixelWidth * 6
                 horizontalAlignment: Text.AlignHCenter
                 delegate : Text  {
                     horizontalAlignment: Text.AlignHCenter
@@ -85,7 +81,7 @@ QGCView {
 
             TableViewColumn {
                 title: "Date"
-                width: ScreenTools.defaultFontPixelWidth * 30
+                width: ScreenTools.defaultFontPixelWidth * 34
                 horizontalAlignment: Text.AlignHCenter
                 delegate : Text  {
                     text: {
@@ -107,20 +103,20 @@ QGCView {
 
             TableViewColumn {
                 title: "Size"
-                width: ScreenTools.defaultFontPixelWidth * 12
+                width: ScreenTools.defaultFontPixelWidth * 18
                 horizontalAlignment: Text.AlignHCenter
                 delegate : Text  {
                     horizontalAlignment: Text.AlignRight
                     text: {
                         var o = controller.model.get(styleData.row)
-                        return o ? numberWithCommas(o.size) : ""
+                        return o ? o.sizeStr : ""
                     }
                 }
             }
 
             TableViewColumn {
                 title: "Status"
-                width: ScreenTools.defaultFontPixelWidth * 18
+                width: ScreenTools.defaultFontPixelWidth * 22
                 horizontalAlignment: Text.AlignHCenter
                 delegate : Text  {
                     horizontalAlignment: Text.AlignHCenter

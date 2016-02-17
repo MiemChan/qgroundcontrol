@@ -36,28 +36,28 @@ import QGroundControl.Controls      1.0
 import QGroundControl.Palette       1.0
 import QGroundControl.Vehicle       1.0
 import QGroundControl.Controllers   1.0
+import QGroundControl.FactSystem    1.0
 
 /// Flight Display View
-Item {
-    id: root
+QGCView {
+    id:             root
+    viewPanel:      _panel
+    topDialogMargin: height - availableHeight
 
     QGCPalette { id: qgcPal; colorGroupEnabled: enabled }
 
     property real availableHeight: parent.height
-    property bool interactive:    true
 
     readonly property bool isBackgroundDark: _mainIsMap ? (_flightMap ? _flightMap.isSatelliteMap : true) : true
 
-    property var _activeVehicle:  multiVehicleManager.activeVehicle
+    property var _activeVehicle:    multiVehicleManager.activeVehicle
 
-    readonly property var  _defaultVehicleCoordinate:   mainWindow.tabletPosition
     readonly property real _defaultRoll:                0
     readonly property real _defaultPitch:               0
     readonly property real _defaultHeading:             0
-    readonly property real _defaultAltitudeWGS84:       0
+    readonly property real _defaultAltitudeAMSL:        0
     readonly property real _defaultGroundSpeed:         0
     readonly property real _defaultAirSpeed:            0
-    readonly property real _defaultClimbRate:           0
 
     readonly property string _mapName:                  "FlightDisplayView"
     readonly property string _showMapBackgroundKey:     "/showMapBackground"
@@ -67,274 +67,222 @@ Item {
     property bool _mainIsMap:           QGroundControl.loadBoolGlobalSetting(_mainIsMapKey,  true)
     property bool _isPipVisible:        QGroundControl.loadBoolGlobalSetting(_PIPVisibleKey, true)
 
-    property real _roll:                _activeVehicle ? (isNaN(_activeVehicle.roll)    ? _defaultRoll    : _activeVehicle.roll)    : _defaultRoll
-    property real _pitch:               _activeVehicle ? (isNaN(_activeVehicle.pitch)   ? _defaultPitch   : _activeVehicle.pitch)   : _defaultPitch
-    property real _heading:             _activeVehicle ? (isNaN(_activeVehicle.heading) ? _defaultHeading : _activeVehicle.heading) : _defaultHeading
+    property real _roll:                _activeVehicle ? _activeVehicle.roll.value    : _defaultRoll
+    property real _pitch:               _activeVehicle ? _activeVehicle.pitch.value   : _defaultPitch
+    property real _heading:             _activeVehicle ? _activeVehicle.heading.value : _defaultHeading
 
-    property var  _vehicleCoordinate:   _activeVehicle ? (_activeVehicle.coordinateValid ? _activeVehicle.coordinate : _defaultVehicleCoordinate) : _defaultVehicleCoordinate
 
-    property real _altitudeWGS84:       _activeVehicle ? _activeVehicle.altitudeWGS84 : _defaultAltitudeWGS84
-    property real _groundSpeed:         _activeVehicle ? _activeVehicle.groundSpeed   : _defaultGroundSpeed
-    property real _airSpeed:            _activeVehicle ? _activeVehicle.airSpeed      : _defaultAirSpeed
-    property real _climbRate:           _activeVehicle ? _activeVehicle.climbRate     : _defaultClimbRate
+    property Fact _emptyFact:               Fact { }
+    property Fact _groundSpeedFact:         _activeVehicle ? _activeVehicle.groundSpeed      : _emptyFact
+    property Fact _airSpeedFact:            _activeVehicle ? _activeVehicle.airSpeed         : _emptyFact
 
-    property var  _flightMap:           null
-    property var  _flightVideo:         null
-    property var  _savedZoomLevel:      0
+    property bool activeVehicleJoystickEnabled: _activeVehicle ? _activeVehicle.joystickEnabled : false
 
-    property real _pipSize:             mainWindow.width * 0.2
+    property real _savedZoomLevel:      0
+
+    property real pipSize:              mainWindow.width * 0.2
 
     FlightDisplayViewController { id: _controller }
 
-    onInteractiveChanged: {
-        if(_flightMap)
-            _flightMap.interactive = interactive
+    function setStates() {
+        if(_mainIsMap) {
+            //-- Adjust Margins
+            _flightMapContainer.state   = "fullMode"
+            _flightVideo.state          = "pipMode"
+            //-- Save/Restore Map Zoom Level
+            if(_savedZoomLevel != 0)
+                _flightMap.zoomLevel = _savedZoomLevel
+            else
+                _savedZoomLevel = _flightMap.zoomLevel
+        } else {
+            //-- Adjust Margins
+            _flightMapContainer.state   = "pipMode"
+            _flightVideo.state          = "fullMode"
+            //-- Set Map Zoom Level
+            _savedZoomLevel = _flightMap.zoomLevel
+            _flightMap.zoomLevel = _savedZoomLevel - 3
+        }
     }
 
-    function reloadContents() {
-        if(_flightVideo) {
-            _flightVideo.visible = false
-        }
-        if(_mainIsMap) {
-            mainLoader.source   = "FlightDisplayViewMap.qml"
-            pipLoader.source    = "FlightDisplayViewVideo.qml"
-        } else {
-            mainLoader.source   = "FlightDisplayViewVideo.qml"
-            pipLoader.source    = "FlightDisplayViewMap.qml"
+    function setPipVisibility(state) {
+        _isPipVisible = state;
+        QGroundControl.saveBoolGlobalSetting(_PIPVisibleKey, state)
+    }
+
+    function px4JoystickCheck() {
+        if (_activeVehicle && !_activeVehicle.px4Firmware && (QGroundControl.virtualTabletJoystick || _activeVehicle.joystickEnabled)) {
+            px4JoystickSupport.open()
         }
     }
+
+    MessageDialog {
+        id:     px4JoystickSupport
+        text:   "Joystick support requires MAVLink MANUAL_CONTROL support. " +
+                "The firmware you are running does not normally support this. " +
+                "It will only work if you have modified the firmware to add MANUAL_CONTROL support."
+    }
+
+    Connections {
+        target: multiVehicleManager
+        onActiveVehicleChanged: px4JoystickCheck()
+    }
+
+    Connections {
+        target: QGroundControl
+        onVirtualTabletJoystickChanged: px4JoystickCheck()
+    }
+
+    onActiveVehicleJoystickEnabledChanged: px4JoystickCheck()
 
     Component.onCompleted: {
-        reloadContents();
-        widgetsLoader.source    = "FlightDisplayViewWidgets.qml"
+        widgetsLoader.source = "FlightDisplayViewWidgets.qml"
+        setStates()
+        px4JoystickCheck()
     }
 
-    //-- Main Window
-    Loader {
-        id:                 mainLoader
-        anchors.fill:       parent
-        onLoaded: {
-            if(_mainIsMap) {
-                _flightMap   = item
-                if(_savedZoomLevel != 0)
-                    _flightMap.zoomLevel = _savedZoomLevel
-                else
-                    _savedZoomLevel = _flightMap.zoomLevel
-                _flightMap.updateMapPosition(true /* force */)
-            } else {
-                _flightVideo = item
-            }
-        }
-    }
+    QGCViewPanel {
+        id:             _panel
+        anchors.fill:   parent
 
-    //-- PIP Window
-    Item {
-        id:                 pip
-        visible:            _controller.hasVideo && _isPipVisible
-        anchors.margins:    ScreenTools.defaultFontPixelHeight
-        anchors.left:       parent.left
-        anchors.bottom:     parent.bottom
-        width:              _pipSize
-        height:             _pipSize * (9/16)
-        Loader {
-            id:                 pipLoader
-            anchors.fill:       parent
-            onLoaded: {
-                if(_mainIsMap) {
-                    _flightVideo = item
-                } else {
-                    _flightMap = item
-                    _savedZoomLevel = _flightMap.zoomLevel
-                    _flightMap.zoomLevel = _savedZoomLevel - 3
+        //-- Map View
+        //   For whatever reason, if FlightDisplayViewMap is the _panel item, changing
+        //   width/height has no effect.
+        Item {
+            id: _flightMapContainer
+            z:  _mainIsMap ? _panel.z + 1 : _panel.z + 2
+            anchors.left:   _panel.left
+            anchors.bottom: _panel.bottom
+            visible:        _mainIsMap || _isPipVisible
+            width:          _mainIsMap ? _panel.width  : pipSize
+            height:         _mainIsMap ? _panel.height : pipSize * (9/16)
+            states: [
+                State {
+                    name:   "pipMode"
+                    PropertyChanges {
+                        target:             _flightMapContainer
+                        anchors.margins:    ScreenTools.defaultFontPixelHeight
+                    }
+                },
+                State {
+                    name:   "fullMode"
+                    PropertyChanges {
+                        target:             _flightMapContainer
+                        anchors.margins:    0
+                    }
                 }
-            }
-        }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                _mainIsMap = !_mainIsMap
-                reloadContents();
-                QGroundControl.saveBoolGlobalSetting(_mainIsMapKey, _mainIsMap)
-            }
-        }
-        Image {
-            id:             closePIP
-            source:         "/qmlimages/PiP.svg"
-            mipmap:         true
-            fillMode:       Image.PreserveAspectFit
-            anchors.left:   parent.left
-            anchors.bottom: parent.bottom
-            height:         ScreenTools.defaultFontPixelSize * 2.5
-            width:          ScreenTools.defaultFontPixelSize * 2.5
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    _isPipVisible = false
-                    QGroundControl.saveBoolGlobalSetting(_PIPVisibleKey, false)
-                }
-            }
-        }
-    }
-
-    //-- Show PIP
-    Rectangle {
-        id:                     openPIP
-        anchors.left :          parent.left
-        anchors.bottom:         parent.bottom
-        anchors.margins:        ScreenTools.defaultFontPixelHeight
-        height:                 ScreenTools.defaultFontPixelSize * 2
-        width:                  ScreenTools.defaultFontPixelSize * 2
-        radius:                 ScreenTools.defaultFontPixelSize / 3
-        visible:                _controller.hasVideo && !_isPipVisible
-        color:                  isBackgroundDark ? Qt.rgba(0,0,0,0.75) : Qt.rgba(0,0,0,0.5)
-        Image {
-            width:              parent.width  * 0.75
-            height:             parent.height * 0.75
-            source:             "/res/buttonRight.svg"
-            mipmap:             true
-            fillMode:           Image.PreserveAspectFit
-            anchors.verticalCenter:     parent.verticalCenter
-            anchors.horizontalCenter:   parent.horizontalCenter
-        }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {
-                _isPipVisible = true
-                QGroundControl.saveBoolGlobalSetting(_PIPVisibleKey, true)
-            }
-        }
-    }
-
-    //-- Widgets
-    Loader {
-        id:                 widgetsLoader
-        anchors.right:      parent.right
-        anchors.left:       parent.left
-        anchors.bottom:     parent.bottom
-        height:             availableHeight
-
-        property bool isBackgroundDark: root.isBackgroundDark
-    }
-
-    //-- Virtual Joystick
-    Item {
-        id:             multiTouchItem
-        width:          parent.width  - (pip.width / 2)
-        height:         thumbAreaHeight
-        visible:        QGroundControl.virtualTabletJoystick
-        anchors.bottom: pip.top
-        anchors.bottomMargin: ScreenTools.defaultFontPixelHeight * 2
-        anchors.horizontalCenter: parent.horizontalCenter
-
-        readonly property real thumbAreaHeight: Math.min(parent.height * 0.25, ScreenTools.defaultFontPixelWidth * 16)
-
-        QGCMapPalette { id: mapPal; lightColors: !isBackgroundDark }
-
-        MultiPointTouchArea {
-            anchors.fill:       parent
-            touchPoints: [
-                TouchPoint { id: point1 },
-                TouchPoint { id: point2 }
             ]
-
-            property var leftRect:  Qt.rect(0, 0, parent.thumbAreaHeight, parent.thumbAreaHeight)
-            property var rightRect: Qt.rect(parent.width - parent.thumbAreaHeight, 0, parent.thumbAreaHeight, parent.thumbAreaHeight)
-
-            function pointInRect(rect, point) {
-                return point.x >= rect.x &&
-                        point.y >= rect.y &&
-                        point.x <= rect.x + rect.width &&
-                        point.y <= rect.y + rect.height
-            }
-
-            function newTouchPoints(touchPoints)
-            {
-                var point1Location = 0
-                var point2Location = 0
-
-                var point1
-                if (touchPoints.length > 0) {
-                    point1 = touchPoints[0]
-                    if (pointInRect(leftRect, point1)) {
-                        point1Location = -1
-                    } else if (pointInRect(rightRect, point1)) {
-                        point1Location = 1
-                    }
-                }
-
-                var point2
-                if (touchPoints.length == 2) {
-                    point2 = touchPoints[1]
-                    if (pointInRect(leftRect, point2)) {
-                        point2Location = -1
-                    } else if (pointInRect(rightRect, point2)) {
-                        point2Location = 1
-                    }
-                }
-
-                var leftStickSet = false
-                var rightStickSet = false
-
-                // Make sure points are not both in the same rect
-                if (point1Location != point2Location) {
-                    if (point1Location != 0) {
-                        if (point1Location == -1) {
-                            leftStick.stickPosition = point1
-                            leftStickSet = true
-                        } else {
-                            rightStick.stickPosition = Qt.point(point1.x - (multiTouchItem.width - multiTouchItem.thumbAreaHeight), point1.y)
-                            rightStickSet = true
-                        }
-                    }
-                    if (point2Location != 0) {
-                        if (point2Location == -1) {
-                            leftStick.stickPosition = point2
-                            leftStickSet = true
-                        } else {
-                            rightStick.stickPosition = Qt.point(point2.x - (multiTouchItem.width - multiTouchItem.thumbAreaHeight), point2.y)
-                            rightStickSet = true
-                        }
-                    }
-                }
-                if (!leftStickSet) {
-                    leftStick.reCenter()
-                }
-                if (!rightStickSet) {
-                    rightStick.reCenter()
-                }
-            }
-
-            onTouchUpdated: newTouchPoints(touchPoints)
-        }
-
-        Timer {
-            interval:   40  // 25Hz, same as real joystick rate
-            running:    QGroundControl.virtualTabletJoystick && _activeVehicle
-            repeat:     true
-            onTriggered: {
-                if (_activeVehicle) {
-                    _activeVehicle.virtualTabletJoystickValue(rightStick.xAxis, rightStick.yAxis, leftStick.xAxis, leftStick.yAxis)
-                }
+            FlightDisplayViewMap {
+                id:             _flightMap
+                anchors.fill:   parent
             }
         }
 
-        JoystickThumbPad {
-            id:             leftStick
-            anchors.left:   parent.left
-            anchors.bottom: parent.bottom
-            width:          parent.thumbAreaHeight
-            height:         parent.thumbAreaHeight
-            yAxisThrottle:  true
-            lightColors:    !isBackgroundDark
+        //-- Video View
+        FlightDisplayViewVideo {
+            id:             _flightVideo
+            z:              _mainIsMap ? _panel.z + 2 : _panel.z + 1
+            width:          !_mainIsMap ? _panel.width  : pipSize
+            height:         !_mainIsMap ? _panel.height : pipSize * (9/16)
+            anchors.left:   _panel.left
+            anchors.bottom: _panel.bottom
+            visible:        _controller.hasVideo && (!_mainIsMap || _isPipVisible)
+            states: [
+                State {
+                    name:   "pipMode"
+                    PropertyChanges {
+                        target: _flightVideo
+                        anchors.margins:    ScreenTools.defaultFontPixelHeight
+                    }
+                },
+                State {
+                    name:   "fullMode"
+                    PropertyChanges {
+                        target: _flightVideo
+                        anchors.margins:    0
+                    }
+                }
+            ]
         }
 
-        JoystickThumbPad {
-            id:             rightStick
-            anchors.right:  parent.right
-            anchors.bottom: parent.bottom
-            width:          parent.thumbAreaHeight
-            height:         parent.thumbAreaHeight
-            lightColors:    !isBackgroundDark
+        QGCPipable {
+            id:                 _flightVideoPipControl
+            z:                  _flightVideo.z + 3
+            width:              pipSize
+            height:             pipSize * (9/16)
+            anchors.left:       _panel.left
+            anchors.bottom:     _panel.bottom
+            anchors.margins:    ScreenTools.defaultFontPixelHeight
+            isHidden:           !_isPipVisible
+            isDark:             isBackgroundDark
+            onActivated: {
+                _mainIsMap = !_mainIsMap
+                setStates()
+            }
+            onHideIt: {
+                setPipVisibility(!state)
+            }
+        }
+
+        //-- Widgets
+        Loader {
+            id:                 widgetsLoader
+            z:                  _panel.z + 4
+            anchors.right:      parent.right
+            anchors.left:       parent.left
+            anchors.bottom:     parent.bottom
+            height:             availableHeight
+            property bool isBackgroundDark: root.isBackgroundDark
+            property var qgcView: root
+        }
+
+        //-- Virtual Joystick
+        Item {
+            id:                         multiTouchItem
+            z:                          _panel.z + 5
+            width:                      parent.width  - (_flightVideoPipControl.width / 2)
+            height:                     thumbAreaHeight
+            visible:                    QGroundControl.virtualTabletJoystick
+            anchors.bottom:             _flightVideoPipControl.top
+            anchors.bottomMargin:       ScreenTools.defaultFontPixelHeight * 2
+            anchors.horizontalCenter:   parent.horizontalCenter
+
+            readonly property real thumbAreaHeight: Math.min(parent.height * 0.25, ScreenTools.defaultFontPixelWidth * 16)
+
+            QGCMapPalette { id: mapPal; lightColors: !isBackgroundDark }
+
+            Timer {
+                interval:   40  // 25Hz, same as real joystick rate
+                running:    QGroundControl.virtualTabletJoystick && _activeVehicle
+                repeat:     true
+                onTriggered: {
+                    if (_activeVehicle) {
+                        _activeVehicle.virtualTabletJoystickValue(rightStick.xAxis, rightStick.yAxis, leftStick.xAxis, leftStick.yAxis)
+                    }
+                }
+            }
+
+            JoystickThumbPad {
+                id:                     leftStick
+                anchors.leftMargin:     xPositionDelta
+                anchors.bottomMargin:   -yPositionDelta
+                anchors.left:           parent.left
+                anchors.bottom:         parent.bottom
+                width:                  parent.thumbAreaHeight
+                height:                 parent.thumbAreaHeight
+                yAxisThrottle:          true
+                lightColors:            !isBackgroundDark
+            }
+
+            JoystickThumbPad {
+                id:                     rightStick
+                anchors.rightMargin:    -xPositionDelta
+                anchors.bottomMargin:   -yPositionDelta
+                anchors.right:          parent.right
+                anchors.bottom:         parent.bottom
+                width:                  parent.thumbAreaHeight
+                height:                 parent.thumbAreaHeight
+                lightColors:            !isBackgroundDark
+            }
         }
     }
 }

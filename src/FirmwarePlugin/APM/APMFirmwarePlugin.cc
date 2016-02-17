@@ -35,6 +35,9 @@ QGC_LOGGING_CATEGORY(APMFirmwarePluginLog, "APMFirmwarePluginLog")
 static const QRegExp APM_COPTER_REXP("^(ArduCopter|APM:Copter)");
 static const QRegExp APM_PLANE_REXP("^(ArduPlane|APM:Plane)");
 static const QRegExp APM_ROVER_REXP("^(ArduRover|APM:Rover)");
+static const QRegExp APM_PX4NUTTX_REXP("^PX4: .*NuttX: .*");
+static const QRegExp APM_FRAME_REXP("^Frame: ");
+static const QRegExp APM_SYSID_REXP("^PX4v2 ");
 
 // Regex to parse version text coming from APM, gives out firmware type, major, minor and patch level numbers
 static const QRegExp VERSION_REXP("^(APM:Copter|APM:Plane|APM:Rover|ArduCopter|ArduPlane|ArduRover) +[vV](\\d*)\\.*(\\d*)*\\.*(\\d*)*");
@@ -214,6 +217,11 @@ int APMFirmwarePlugin::manualControlReservedButtonCount(void)
 
 void APMFirmwarePlugin::adjustMavlinkMessage(Vehicle* vehicle, mavlink_message_t* message)
 {
+    //-- Don't process messages to/from UDP Bridge. It doesn't suffer from these issues
+    if (message->compid == MAV_COMP_ID_UDP_BRIDGE) {
+        return;
+    }
+
     if (message->msgid == MAVLINK_MSG_ID_PARAM_VALUE) {
         mavlink_param_value_t paramValue;
         mavlink_param_union_t paramUnion;
@@ -294,16 +302,13 @@ void APMFirmwarePlugin::adjustMavlinkMessage(Vehicle* vehicle, mavlink_message_t
     }
 
     if (message->msgid == MAVLINK_MSG_ID_STATUSTEXT) {
+        QString messageText;
+
         mavlink_statustext_t statusText;
         mavlink_msg_statustext_decode(message, &statusText);
 
         if (!_firmwareVersion.isValid() || statusText.severity < MAV_SEVERITY_NOTICE) {
-            QByteArray b;
-            b.resize(MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1);
-            mavlink_msg_statustext_get_text(message, b.data());
-            // Ensure NUL-termination
-            b[b.length()-1] = '\0';
-            QString messageText = QString(b);
+            messageText = _getMessageText(message);
             qCDebug(APMFirmwarePluginLog) << messageText;
 
             if (!_firmwareVersion.isValid()) {
@@ -320,7 +325,7 @@ void APMFirmwarePlugin::adjustMavlinkMessage(Vehicle* vehicle, mavlink_message_t
                         switch (vehicle->vehicleType()) {
                         case MAV_TYPE_FIXED_WING:
                             supportedMajorNumber = 3;
-                            supportedMinorNumber = 4;
+                            supportedMinorNumber = 2;
                             break;
                         case MAV_TYPE_QUADROTOR:
                         case MAV_TYPE_COAXIAL:
@@ -330,7 +335,7 @@ void APMFirmwarePlugin::adjustMavlinkMessage(Vehicle* vehicle, mavlink_message_t
                         case MAV_TYPE_OCTOROTOR:
                         case MAV_TYPE_TRICOPTER:
                             supportedMajorNumber = 3;
-                            supportedMinorNumber = 3;
+                            supportedMinorNumber = 2;
                             break;
                         default:
                             break;
@@ -358,7 +363,30 @@ void APMFirmwarePlugin::adjustMavlinkMessage(Vehicle* vehicle, mavlink_message_t
         if (_textSeverityAdjustmentNeeded) {
             _adjustSeverity(message);
         }
+
+        if (messageText.isEmpty()) {
+            messageText = _getMessageText(message);
+        }
+
+        // The following messages are incorrectly labeled as warning message.
+        // Fixed in newer firmware (unreleased at this point), but still in older firmware.
+        if (messageText.contains(APM_COPTER_REXP) || messageText.contains(APM_PLANE_REXP) || messageText.contains(APM_ROVER_REXP) ||
+                messageText.contains(APM_PX4NUTTX_REXP) || messageText.contains(APM_FRAME_REXP) || messageText.contains(APM_SYSID_REXP)) {
+            _setInfoSeverity(message);
+        }
     }
+}
+
+QString APMFirmwarePlugin::_getMessageText(mavlink_message_t* message) const
+{
+    QByteArray b;
+
+    b.resize(MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1);
+    mavlink_msg_statustext_get_text(message, b.data());
+
+    // Ensure NUL-termination
+    b[b.length()-1] = '\0';
+    return QString(b);
 }
 
 bool APMFirmwarePlugin::_isTextSeverityAdjustmentNeeded(const APMFirmwareVersion& firmwareVersion)
@@ -405,6 +433,15 @@ void APMFirmwarePlugin::_adjustSeverity(mavlink_message_t* message) const
     mavlink_msg_statustext_encode(message->sysid, message->compid, message, &statusText);
 }
 
+void APMFirmwarePlugin::_setInfoSeverity(mavlink_message_t* message) const
+{
+    mavlink_statustext_t statusText;
+    mavlink_msg_statustext_decode(message, &statusText);
+
+    statusText.severity = MAV_SEVERITY_INFO;
+    mavlink_msg_statustext_encode(message->sysid, message->compid, message, &statusText);
+}
+
 void APMFirmwarePlugin::_adjustCalibrationMessageSeverity(mavlink_message_t* message) const
 {
     mavlink_statustext_t statusText;
@@ -446,8 +483,8 @@ QList<MAV_CMD> APMFirmwarePlugin::supportedMissionCommands(void)
 {
     QList<MAV_CMD> list;
 
-    list << MAV_CMD_NAV_WAYPOINT
-         << MAV_CMD_NAV_LOITER_UNLIM << MAV_CMD_NAV_LOITER_TURNS << MAV_CMD_NAV_LOITER_TIME
+    list << MAV_CMD_NAV_WAYPOINT << MAV_CMD_NAV_SPLINE_WAYPOINT
+         << MAV_CMD_NAV_LOITER_UNLIM << MAV_CMD_NAV_LOITER_TURNS << MAV_CMD_NAV_LOITER_TIME << MAV_CMD_NAV_LOITER_TO_ALT
          << MAV_CMD_NAV_RETURN_TO_LAUNCH << MAV_CMD_NAV_LAND << MAV_CMD_NAV_TAKEOFF
          << MAV_CMD_NAV_GUIDED_ENABLE
          << MAV_CMD_DO_SET_ROI << MAV_CMD_DO_GUIDED_LIMITS << MAV_CMD_DO_JUMP << MAV_CMD_DO_CHANGE_SPEED << MAV_CMD_DO_SET_CAM_TRIGG_DIST
@@ -455,6 +492,19 @@ QList<MAV_CMD> APMFirmwarePlugin::supportedMissionCommands(void)
          << MAV_CMD_DO_SET_SERVO << MAV_CMD_DO_REPEAT_SERVO
          << MAV_CMD_DO_DIGICAM_CONFIGURE << MAV_CMD_DO_DIGICAM_CONTROL
          << MAV_CMD_DO_MOUNT_CONTROL
-         << MAV_CMD_CONDITION_DELAY  << MAV_CMD_CONDITION_CHANGE_ALT << MAV_CMD_CONDITION_DISTANCE << MAV_CMD_CONDITION_YAW;
+         << MAV_CMD_DO_SET_HOME
+         << MAV_CMD_DO_LAND_START
+         << MAV_CMD_DO_FENCE_ENABLE << MAV_CMD_DO_PARACHUTE << MAV_CMD_DO_INVERTED_FLIGHT << MAV_CMD_DO_GRIPPER
+         << MAV_CMD_CONDITION_DELAY  << MAV_CMD_CONDITION_CHANGE_ALT << MAV_CMD_CONDITION_DISTANCE << MAV_CMD_CONDITION_YAW
+         << MAV_CMD_NAV_VTOL_TAKEOFF << MAV_CMD_NAV_VTOL_LAND
+         << MAV_CMD_NAV_CONTINUE_AND_CHANGE_ALT;
+
     return list;
+}
+
+void APMFirmwarePlugin::missionCommandOverrides(QString& commonJsonFilename, QString& fixedWingJsonFilename, QString& multiRotorJsonFilename) const
+{
+    commonJsonFilename = QStringLiteral(":/json/APM/MavCmdInfoCommon.json");
+    fixedWingJsonFilename = QStringLiteral(":/json/APM/MavCmdInfoFixedWing.json");
+    multiRotorJsonFilename = QStringLiteral(":/json/APM/MavCmdInfoMultiRotor.json");
 }

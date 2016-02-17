@@ -87,7 +87,7 @@ public:
     /// @return -1: reserver all buttons, >0 number of buttons to reserve
     virtual int manualControlReservedButtonCount(void) = 0;
     
-    /// Called before any mavlink message is processed by Vehicle such taht the firmwre plugin
+    /// Called before any mavlink message is processed by Vehicle such that the firmwre plugin
     /// can adjust any message characteristics. This is handy to adjust or differences in mavlink
     /// spec implementations such that the base code can remain mavlink generic.
     ///     @param vehicle Vehicle message came from
@@ -113,6 +113,12 @@ public:
 
     /// List of supported mission commands. Empty list for all commands supported.
     virtual QList<MAV_CMD> supportedMissionCommands(void) = 0;
+
+    /// Returns the names for the mission command json override files. Empty string to specify no overrides.
+    ///     @param[out] commonJsonFilename Filename for common overrides
+    ///     @param[out] fixedWingJsonFilename Filename for fixed wing overrides
+    ///     @param[out] multiRotorJsonFilename Filename for multi rotor overrides
+    virtual void missionCommandOverrides(QString& commonJsonFilename, QString& fixedWingJsonFilename, QString& multiRotorJsonFilename) const = 0;
 };
 
 #endif

@@ -86,14 +86,12 @@ UAS::UAS(MAVLinkProtocol* protocol, Vehicle* vehicle, FirmwarePluginManager * fi
     manualYawAngle(0),
     manualThrust(0),
 
-    positionLock(false),
     isGlobalPositionKnown(false),
 
     latitude(0.0),
     longitude(0.0),
     altitudeAMSL(0.0),
     altitudeAMSLFT(0.0),
-    altitudeWGS84(0.0),
     altitudeRelative(0.0),
 
     satRawHDOP(1e10f),
@@ -185,12 +183,10 @@ UAS::UAS(MAVLinkProtocol* protocol, Vehicle* vehicle, FirmwarePluginManager * fi
     }
 
 #ifndef __mobile__
-    connect(mavlink, &MAVLinkProtocol::messageReceived, &fileManager, &FileManager::receiveMessage);
+    connect(_vehicle, &Vehicle::mavlinkMessageReceived, &fileManager, &FileManager::receiveMessage);
 #endif
 
     color = UASInterface::getNextColor();
-    connect(&statusTimeout, &QTimer::timeout, this, &UAS::updateState);
-    statusTimeout.start(500);
 }
 
 /**
@@ -199,46 +195,6 @@ UAS::UAS(MAVLinkProtocol* protocol, Vehicle* vehicle, FirmwarePluginManager * fi
 int UAS::getUASID() const
 {
     return uasId;
-}
-
-/**
-* Update the heartbeat.
-*/
-void UAS::updateState()
-{
-    // Check if heartbeat timed out
-    quint64 heartbeatInterval = QGC::groundTimeUsecs() - lastHeartbeat;
-    if (!connectionLost && (heartbeatInterval > timeoutIntervalHeartbeat))
-    {
-        connectionLost = true;
-        receivedMode = false;
-        QString audiostring = QString("Link lost to system %1").arg(this->getUASID());
-        _say(audiostring.toLower(), GAudioOutput::AUDIO_SEVERITY_ALERT);
-    }
-
-    // Update connection loss time on each iteration
-    if (connectionLost && (heartbeatInterval > timeoutIntervalHeartbeat))
-    {
-        connectionLossTime = heartbeatInterval;
-        emit heartbeatTimeout(true, heartbeatInterval/1000);
-    }
-
-    // Connection gained
-    if (connectionLost && (heartbeatInterval < timeoutIntervalHeartbeat))
-    {
-        QString audiostring = QString("Link regained to system %1").arg(this->getUASID());
-        _say(audiostring.toLower(), GAudioOutput::AUDIO_SEVERITY_NOTICE);
-        connectionLost = false;
-        connectionLossTime = 0;
-        emit heartbeatTimeout(false, 0);
-    }
-
-    // Position lock is set by the MAVLink message handler
-    // if no position lock is available, indicate an error
-    if (positionLock)
-    {
-        positionLock = false;
-    }
 }
 
 void UAS::receiveMessage(mavlink_message_t message)
@@ -325,8 +281,6 @@ void UAS::receiveMessage(mavlink_message_t message)
             {
                 break;
             }
-            lastHeartbeat = QGC::groundTimeUsecs();
-            emit heartbeat(this);
             mavlink_heartbeat_t state;
             mavlink_msg_heartbeat_decode(&message, &state);
 
@@ -400,18 +354,6 @@ void UAS::receiveMessage(mavlink_message_t message)
 
             break;
 
-        case MAVLINK_MSG_ID_BATTERY_STATUS:
-        {
-            if (multiComponentSourceDetected && wrongComponent)
-            {
-                break;
-            }
-            mavlink_battery_status_t bat_status;
-            mavlink_msg_battery_status_decode(&message, &bat_status);
-            emit batteryConsumedChanged(this, (double)bat_status.current_consumed);
-        }
-            break;
-
         case MAVLINK_MSG_ID_SYS_STATUS:
         {
             if (multiComponentSourceDetected && wrongComponent)
@@ -435,6 +377,8 @@ void UAS::receiveMessage(mavlink_message_t message)
             // Process CPU load.
             emit loadChanged(this,state.load/10.0f);
             emit valueChanged(uasId, name.arg("load"), "%", state.load/10.0f, time);
+
+            currentVoltage = state.voltage_battery/1000.0f;
 
             if (state.voltage_battery > 0.0f && state.voltage_battery != UINT16_MAX) {
                 // Battery charge/time remaining/voltage calculations
@@ -617,7 +561,7 @@ void UAS::receiveMessage(mavlink_message_t message)
             if (!isnan(hud.airspeed))
                 setAirSpeed(hud.airspeed);
             speedZ = -hud.climb;
-            emit altitudeChanged(this, altitudeAMSL, altitudeWGS84, altitudeRelative, -speedZ, time);
+            emit altitudeChanged(this, altitudeAMSL, altitudeRelative, -speedZ, time);
             emit speedChanged(this, groundSpeed, airSpeed, time);
         }
             break;
@@ -637,8 +581,6 @@ void UAS::receiveMessage(mavlink_message_t message)
 
                 // Emit
                 emit velocityChanged_NED(this, speedX, speedY, speedZ, time);
-
-                positionLock = true;
             }
         }
             break;
@@ -661,7 +603,6 @@ void UAS::receiveMessage(mavlink_message_t message)
 
             setLatitude(pos.lat/(double)1E7);
             setLongitude(pos.lon/(double)1E7);
-            setAltitudeWGS84(pos.alt/1000.0);
             setAltitudeRelative(pos.relative_alt/1000.0);
 
             globalEstimatorActive = true;
@@ -670,15 +611,14 @@ void UAS::receiveMessage(mavlink_message_t message)
             speedY = pos.vy/100.0;
             speedZ = pos.vz/100.0;
 
-            emit globalPositionChanged(this, getLatitude(), getLongitude(), getAltitudeAMSL(), getAltitudeWGS84(), time);
-            emit altitudeChanged(this, altitudeAMSL, altitudeWGS84, altitudeRelative, -speedZ, time);
+            emit globalPositionChanged(this, getLatitude(), getLongitude(), getAltitudeAMSL(), time);
+            emit altitudeChanged(this, altitudeAMSL, altitudeRelative, -speedZ, time);
             // We had some frame mess here, global and local axes were mixed.
             emit velocityChanged_NED(this, speedX, speedY, speedZ, time);
 
             setGroundSpeed(qSqrt(speedX*speedX+speedY*speedY));
             emit speedChanged(this, groundSpeed, airSpeed, time);
 
-            positionLock = true;
             isGlobalPositionKnown = true;
         }
             break;
@@ -699,7 +639,6 @@ void UAS::receiveMessage(mavlink_message_t message)
 
             if (pos.fix_type > 2)
             {
-                positionLock = true;
                 isGlobalPositionKnown = true;
 
                 latitude_gps  = pos.lat/(double)1E7;
@@ -710,9 +649,8 @@ void UAS::receiveMessage(mavlink_message_t message)
                 if (!globalEstimatorActive) {
                     setLatitude(latitude_gps);
                     setLongitude(longitude_gps);
-                    setAltitudeWGS84(altitude_gps);
-                    emit globalPositionChanged(this, getLatitude(), getLongitude(), getAltitudeAMSL(), getAltitudeWGS84(), time);
-                    emit altitudeChanged(this, altitudeAMSL, altitudeWGS84, altitudeRelative, -speedZ, time);
+                    emit globalPositionChanged(this, getLatitude(), getLongitude(), getAltitudeAMSL(), time);
+                    emit altitudeChanged(this, altitudeAMSL, altitudeRelative, -speedZ, time);
 
                     float vel = pos.vel/100.0f;
                     // Smaller than threshold and not NaN
@@ -789,6 +727,7 @@ void UAS::receiveMessage(mavlink_message_t message)
         {
             mavlink_command_ack_t ack;
             mavlink_msg_command_ack_decode(&message, &ack);
+            emit commandAck(this, message.compid, ack.command, ack.result);
             switch (ack.result)
             {
             case MAV_RESULT_ACCEPTED:
@@ -1417,6 +1356,10 @@ void UAS::processParamValueMsg(mavlink_message_t& msg, const QString& paramName,
             paramValue = QVariant(paramUnion.param_int8);
             break;
 
+        case MAV_PARAM_TYPE_UINT16:
+            paramValue = QVariant(paramUnion.param_uint16);
+            break;
+
         case MAV_PARAM_TYPE_INT16:
             paramValue = QVariant(paramUnion.param_int16);
             break;
@@ -1428,6 +1371,14 @@ void UAS::processParamValueMsg(mavlink_message_t& msg, const QString& paramName,
         case MAV_PARAM_TYPE_INT32:
             paramValue = QVariant(paramUnion.param_int32);
             break;
+
+        //-- Note: These are not handled above:
+        //
+        //   MAV_PARAM_TYPE_UINT64
+        //   MAV_PARAM_TYPE_INT64
+        //   MAV_PARAM_TYPE_REAL64
+        //
+        //   No space in message (the only storage allocation is a "float") and not present in mavlink_param_union_t
 
         default:
             qCritical() << "INVALID DATA TYPE USED AS PARAMETER VALUE: " << rawValue.param_type;
@@ -2182,7 +2133,7 @@ void UAS::sendMapRCToParam(QString param_id, float scale, float value0, quint8 p
                                   valueMin,
                                   valueMax);
     _vehicle->sendMessage(message);
-    qDebug() << "Mavlink message sent";
+    //qDebug() << "Mavlink message sent";
 }
 
 void UAS::unsetRCToParameterMap()

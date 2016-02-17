@@ -33,9 +33,11 @@ import QGroundControl.FlightDisplay         1.0
 import QGroundControl.ScreenTools           1.0
 import QGroundControl.MultiVehicleManager   1.0
 
-/// Inner common QML for MainWindow
+/// Inner common QML for mainWindow
 Item {
-    id:         mainWindow
+    id: mainWindow
+
+    signal reallyClose
 
     readonly property string _planViewSource:   "MissionEditor.qml"
     readonly property string _setupViewSource:  "SetupView.qml"
@@ -48,10 +50,7 @@ Item {
     property real   tbButtonWidth:      tbCellHeight * 1.35
     property real   availableHeight:    height - tbHeight
     property real   menuButtonWidth:    (tbButtonWidth * 2) + (tbSpacing * 4) + 1
-
-    property var    defaultPosition:    QtPositioning.coordinate(37.803784, -122.462276)
-    property var    tabletPosition:     defaultPosition
-
+    property var    gcsPosition:        QtPositioning.coordinate()  // Starts as invalid coordinate
     property var    currentPopUp:       null
     property real   currentCenterX:     0
     property var    activeVehicle:      multiVehicleManager.activeVehicle
@@ -111,24 +110,86 @@ Item {
         setupViewLoader.item.showVehicleComponentPanel(vehicleComponent)
     }
 
+    /// Start the process of closing QGroundControl. Prompts the user are needed.
+    function attemptWindowClose() {
+        unsavedMissionCloseDialog.check()
+    }
+
+    function finishCloseProcess() {
+        QGroundControl.linkManager.shutdown()
+        // The above shutdown causes a flurry of activity as the vehicle components are removed. This in turn
+        // causes the Windows Version of Qt to crash if you allow the close event to be accepted. In order to prevent
+        // the crash, we ignore the close event and setup a delayed timer to close the window after things settle down.
+        delayedWindowCloseTimer.start()
+    }
+
+    MessageDialog {
+        id:                 unsavedMissionCloseDialog
+        title:              "QGroundControl close"
+        text:               "You have a mission edit in progress which has not been saved/sent. If you close you will lose changes. Are you sure you want to close?"
+        standardButtons:    StandardButton.Yes | StandardButton.No
+        modality:           Qt.ApplicationModal
+        visible:            false
+
+        onYes: activeConnectionsCloseDialog.check()
+
+        function check() {
+            if (planViewLoader.item && planViewLoader.item.syncNeeded) {
+                unsavedMissionCloseDialog.open()
+            } else {
+                activeConnectionsCloseDialog.check()
+            }
+        }
+    }
+
+    MessageDialog {
+        id:                 activeConnectionsCloseDialog
+        title:              "QGroundControl close"
+        text:               "There are still active connections to vehicles. Do you want to disconnect these before closing?"
+        standardButtons:    StandardButton.Yes | StandardButton.Cancel
+        modality:           Qt.ApplicationModal
+        visible:            false
+        onYes:              finishCloseProcess()
+
+        function check() {
+            if (QGroundControl.multiVehicleManager.activeVehicle) {
+                activeConnectionsCloseDialog.open()
+            } else {
+                finishCloseProcess()
+            }
+        }
+    }
+
+    Timer {
+        id:         delayedWindowCloseTimer
+        interval:   1500
+        running:    false
+        repeat:     false
+
+        onTriggered: {
+            mainWindow.reallyClose()
+        }
+    }
+
+
     //-- Detect tablet position
     PositionSource {
         id:             positionSource
         updateInterval: 1000
-        active:         false
+        active:         true
+
         onPositionChanged: {
             if(positionSource.valid) {
                 if(positionSource.position.coordinate.latitude) {
                     if(Math.abs(positionSource.position.coordinate.latitude)  > 0.001) {
                         if(positionSource.position.coordinate.longitude) {
                             if(Math.abs(positionSource.position.coordinate.longitude)  > 0.001) {
-                                tabletPosition = positionSource.position.coordinate
+                                gcsPosition = positionSource.position.coordinate
                             }
                         }
                     }
                 }
             }
-            positionSource.stop()
         }
     }
 
@@ -140,7 +201,6 @@ Item {
         } else {
             criticalMessageText.text = message
             criticalMmessageArea.visible = true
-            mainWindow.setMapInteractive(false)
         }
     }
 
@@ -158,10 +218,6 @@ Item {
         if(leftPanel.visible && !leftPanel.item.animateHideDialog.running) {
             leftPanel.item.animateHideDialog.start()
         }
-    }
-
-    function setMapInteractive(enabled) {
-        flightView.interactive = enabled
     }
 
     onFormatedMessageChanged: {
@@ -187,7 +243,6 @@ Item {
         }
         currentPopUp = messageArea
         messageArea.visible = true
-        mainWindow.setMapInteractive(false)
     }
 
     function showPopUp(dropItem, centerX) {
@@ -235,9 +290,6 @@ Item {
         anchors.fill:       parent
         availableHeight:    mainWindow.availableHeight
         visible:            true
-        Component.onCompleted: {
-            positionSource.start()
-        }
     }
 
     Loader {
@@ -283,7 +335,6 @@ Item {
         function close() {
             currentPopUp = null
             messageText.text    = ""
-            mainWindow.setMapInteractive(true)
             messageArea.visible = false
         }
 
@@ -295,13 +346,12 @@ Item {
         anchors.horizontalCenter:   parent.horizontalCenter
         anchors.top:                parent.top
         anchors.topMargin:          tbHeight + ScreenTools.defaultFontPixelHeight
-        Flickable {
+        QGCFlickable {
             id:                 messageFlick
             anchors.margins:    ScreenTools.defaultFontPixelHeight
             anchors.fill:       parent
             contentHeight:      messageText.height
             contentWidth:       messageText.width
-            boundsBehavior:     Flickable.StopAtBounds
             pixelAligned:       true
             clip:               true
             TextEdit {
@@ -347,7 +397,6 @@ Item {
                 mainWindow.messageQueue = []
             } else {
                 criticalMessageText.text = ""
-                mainWindow.setMapInteractive(true)
                 criticalMmessageArea.visible = false
             }
         }
@@ -360,6 +409,15 @@ Item {
         anchors.horizontalCenter:   parent.horizontalCenter
         anchors.bottom:             parent.bottom
         anchors.bottomMargin:       ScreenTools.defaultFontPixelHeight
+
+        MouseArea {
+            // This MouseArea prevents the Map below it from getting Mouse events. Without this
+            // things like mousewheel will scroll the Flickable and then scroll the map as well.
+            anchors.fill:       parent
+            preventStealing:    true
+            onWheel:            wheel.accepted = true
+        }
+
         Flickable {
             id:                 criticalMessageFlick
             anchors.margins:    ScreenTools.defaultFontPixelHeight
@@ -380,6 +438,7 @@ Item {
                 color:          "#fdfd3b"
             }
         }
+
         //-- Dismiss Critical Message
         Image {
             id:                 criticalClose
@@ -399,6 +458,7 @@ Item {
                 }
             }
         }
+
         //-- More text below indicator
         Image {
             anchors.margins:    ScreenTools.defaultFontPixelHeight

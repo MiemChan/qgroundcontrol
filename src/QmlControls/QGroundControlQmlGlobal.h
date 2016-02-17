@@ -69,12 +69,14 @@ public:
     Q_PROPERTY(bool     virtualTabletJoystick   READ virtualTabletJoystick      WRITE setVirtualTabletJoystick      NOTIFY virtualTabletJoystickChanged)
 
     // MavLink Protocol
-    Q_PROPERTY(bool     isHeartBeatEnabled      READ isHeartBeatEnabled         WRITE setIsHeartBeatEnabled         NOTIFY isHeartBeatEnabledChanged)
     Q_PROPERTY(bool     isMultiplexingEnabled   READ isMultiplexingEnabled      WRITE setIsMultiplexingEnabled      NOTIFY isMultiplexingEnabledChanged)
     Q_PROPERTY(bool     isVersionCheckEnabled   READ isVersionCheckEnabled      WRITE setIsVersionCheckEnabled      NOTIFY isVersionCheckEnabledChanged)
     Q_PROPERTY(int      mavlinkSystemID         READ mavlinkSystemID            WRITE setMavlinkSystemID            NOTIFY mavlinkSystemIDChanged)
 
     Q_PROPERTY(Fact*    offlineEditingFirmwareType READ offlineEditingFirmwareType CONSTANT)
+
+    Q_PROPERTY(QGeoCoordinate lastKnownHomePosition READ lastKnownHomePosition CONSTANT)
+    Q_PROPERTY(QGeoCoordinate flightMapPosition MEMBER _flightMapPosition NOTIFY flightMapPositionChanged)
 
     Q_INVOKABLE void    saveGlobalSetting       (const QString& key, const QString& value);
     Q_INVOKABLE QString loadGlobalSetting       (const QString& key, const QString& defaultValue);
@@ -108,10 +110,11 @@ public:
     bool    isSaveLogPromptNotArmed () { return _app->promptFlightDataSaveNotArmed(); }
     bool    virtualTabletJoystick   () { return _virtualTabletJoystick; }
 
-    bool    isHeartBeatEnabled      () { return _toolbox->mavlinkProtocol()->heartbeatsEnabled(); }
     bool    isMultiplexingEnabled   () { return _toolbox->mavlinkProtocol()->multiplexingEnabled(); }
     bool    isVersionCheckEnabled   () { return _toolbox->mavlinkProtocol()->versionCheckEnabled(); }
     int     mavlinkSystemID         () { return _toolbox->mavlinkProtocol()->getSystemId(); }
+
+    QGeoCoordinate lastKnownHomePosition() { return qgcApp()->lastKnownHomePosition(); }
 
     Fact*   offlineEditingFirmwareType () { return &_offlineEditingFirmwareTypeFact; }
 
@@ -124,7 +127,6 @@ public:
     void    setIsSaveLogPromptNotArmed  (bool prompt);
     void    setVirtualTabletJoystick    (bool enabled);
 
-    void    setIsHeartBeatEnabled       (bool enable);
     void    setIsMultiplexingEnabled    (bool enable);
     void    setIsVersionCheckEnabled    (bool enable);
     void    setMavlinkSystemID          (int  id);
@@ -138,13 +140,12 @@ signals:
     void isSaveLogPromptChanged         (bool prompt);
     void isSaveLogPromptNotArmedChanged (bool prompt);
     void virtualTabletJoystickChanged   (bool enabled);
-    void isHeartBeatEnabledChanged      (bool enabled);
     void isMultiplexingEnabledChanged   (bool enabled);
     void isVersionCheckEnabledChanged   (bool enabled);
     void mavlinkSystemIDChanged         (int id);
+    void flightMapPositionChanged       (QGeoCoordinate flightMapPosition);
 
 private:
-
     FlightMapSettings*      _flightMapSettings;
     HomePositionManager*    _homePositionManager;
     LinkManager*            _linkManager;
@@ -152,6 +153,8 @@ private:
     MultiVehicleManager*    _multiVehicleManager;
 
     bool _virtualTabletJoystick;
+
+    QGeoCoordinate _flightMapPosition;
 
     SettingsFact    _offlineEditingFirmwareTypeFact;
     FactMetaData    _offlineEditingFirmwareTypeMetaData;

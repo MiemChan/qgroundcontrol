@@ -38,7 +38,6 @@
         <file alias="MainWindowNative.qml">src/ui/MainWindowNative.qml</file>
         <file alias="MainWindowLeftPanel.qml">src/ui/MainWindowLeftPanel.qml</file>
         <file alias="MissionEditor.qml">src/MissionEditor/MissionEditor.qml</file>
-        <file alias="MissionEditorHelp.qml">src/MissionEditor/MissionEditorHelp.qml</file>
         <file alias="PowerComponent.qml">src/AutoPilotPlugins/PX4/PowerComponent.qml</file>
         <file alias="PowerComponentSummary.qml">src/AutoPilotPlugins/PX4/PowerComponentSummary.qml</file>
         <file alias="PX4FlowSensor.qml">src/VehicleSetup/PX4FlowSensor.qml</file>
@@ -59,6 +58,10 @@
         <file alias="QGroundControl/Controls/QGCButton.qml">src/QmlControls/QGCButton.qml</file>
         <file alias="QGroundControl/Controls/QGCCheckBox.qml">src/QmlControls/QGCCheckBox.qml</file>
         <file alias="QGroundControl/Controls/QGCColoredImage.qml">src/QmlControls/QGCColoredImage.qml</file>
+        <file alias="QGroundControl/Controls/QGCFlickable.qml">src/QmlControls/QGCFlickable.qml</file>
+        <file alias="QGroundControl/Controls/QGCPipable.qml">src/QmlControls/QGCPipable.qml</file>
+        <file alias="QGroundControl/Controls/QGCFlickableVerticalIndicator.qml">src/QmlControls/QGCFlickableVerticalIndicator.qml</file>
+        <file alias="QGroundControl/Controls/QGCFlickableHorizontalIndicator.qml">src/QmlControls/QGCFlickableHorizontalIndicator.qml</file>
         <file alias="QGroundControl/Controls/QGCComboBox.qml">src/QmlControls/QGCComboBox.qml</file>
         <file alias="QGroundControl/Controls/QGCLabel.qml">src/QmlControls/QGCLabel.qml</file>
         <file alias="QGroundControl/Controls/QGCMovableItem.qml">src/QmlControls/QGCMovableItem.qml</file>
@@ -89,6 +92,8 @@
         <file alias="QGroundControl/FlightDisplay/FlightDisplayViewVideo.qml">src/FlightDisplay/FlightDisplayViewVideo.qml</file>
         <file alias="QGroundControl/FlightDisplay/FlightDisplayViewWidgets.qml">src/FlightDisplay/FlightDisplayViewWidgets.qml</file>
         <file alias="QGroundControl/FlightDisplay/qmldir">src/FlightDisplay/qmldir</file>
+
+        <file alias="QGroundControl/FlightMap/qmldir">src/FlightMap/qmldir</file>
         <file alias="QGroundControl/FlightMap/FlightMap.qml">src/FlightMap/FlightMap.qml</file>
         <file alias="QGroundControl/FlightMap/MissionItemIndicator.qml">src/FlightMap/MapItems/MissionItemIndicator.qml</file>
         <file alias="QGroundControl/FlightMap/MissionItemView.qml">src/FlightMap/MapItems/MissionItemView.qml</file>
@@ -98,15 +103,19 @@
         <file alias="QGroundControl/FlightMap/QGCAttitudeWidget.qml">src/FlightMap/Widgets/QGCAttitudeWidget.qml</file>
         <file alias="QGroundControl/FlightMap/QGCCompassWidget.qml">src/FlightMap/Widgets/QGCCompassWidget.qml</file>
         <file alias="QGroundControl/FlightMap/QGCInstrumentWidget.qml">src/FlightMap/Widgets/QGCInstrumentWidget.qml</file>
+        <file alias="QGroundControl/FlightMap/QGCInstrumentWidgetAlternate.qml">src/FlightMap/Widgets/QGCInstrumentWidgetAlternate.qml</file>
         <file alias="QGroundControl/FlightMap/QGCPitchIndicator.qml">src/FlightMap/Widgets/QGCPitchIndicator.qml</file>
         <file alias="QGroundControl/FlightMap/QGCSlider.qml">src/FlightMap/Widgets/QGCSlider.qml</file>
         <file alias="QGroundControl/FlightMap/QGCVideoBackground.qml">src/FlightMap/QGCVideoBackground.qml</file>
-        <file alias="QGroundControl/FlightMap/qmldir">src/FlightMap/qmldir</file>
+        <file alias="QGroundControl/FlightMap/ValuesWidget.qml">src/FlightMap/Widgets/ValuesWidget.qml</file>
         <file alias="QGroundControl/FlightMap/VehicleMapItem.qml">src/FlightMap/MapItems/VehicleMapItem.qml</file>
+
         <file alias="QGroundControl/ScreenTools/qmldir">src/QmlControls/QGroundControl.ScreenTools.qmldir</file>
         <file alias="QGroundControl/ScreenTools/ScreenTools.qml">src/QmlControls/ScreenTools.qml</file>
         <file alias="QmlTest.qml">src/QmlControls/QmlTest.qml</file>
         <file alias="RadioComponent.qml">src/AutoPilotPlugins/Common/RadioComponent.qml</file>
+        <file alias="ESP8266Component.qml">src/AutoPilotPlugins/Common/ESP8266Component.qml</file>
+        <file alias="ESP8266ComponentSummary.qml">src/AutoPilotPlugins/Common/ESP8266ComponentSummary.qml</file>
         <file alias="PX4RadioComponentSummary.qml">src/AutoPilotPlugins/PX4/PX4RadioComponentSummary.qml</file>
         <file alias="PX4TuningComponentCopter.qml">src/AutoPilotPlugins/PX4/PX4TuningComponentCopter.qml</file>
         <file alias="PX4TuningComponentPlane.qml">src/AutoPilotPlugins/PX4/PX4TuningComponentPlane.qml</file>
@@ -136,6 +145,15 @@
         <file alias="VehicleSummary.qml">src/VehicleSetup/VehicleSummary.qml</file>
     </qresource>
     <qresource prefix="/json">
-        <file alias="MavCmdInfo.json">src/MissionManager/MavCmdInfo.json</file>
+        <file alias="MavCmdInfoCommon.json">src/MissionManager/MavCmdInfoCommon.json</file>
+        <file alias="APM/MavCmdInfoCommon.json">src/FirmwarePlugin/APM/MavCmdInfoCommon.json</file>
+        <file alias="APM/MavCmdInfoFixedWing.json">src/FirmwarePlugin/APM/MavCmdInfoFixedWing.json</file>
+        <file alias="APM/MavCmdInfoMultiRotor.json">src/FirmwarePlugin/APM/MavCmdInfoMultiRotor.json</file>
+        <file alias="PX4/MavCmdInfoCommon.json">src/FirmwarePlugin/PX4/MavCmdInfoCommon.json</file>
+        <file alias="PX4/MavCmdInfoFixedWing.json">src/FirmwarePlugin/PX4/MavCmdInfoFixedWing.json</file>
+        <file alias="PX4/MavCmdInfoMultiRotor.json">src/FirmwarePlugin/PX4/MavCmdInfoMultiRotor.json</file>
+        <file alias="Vehicle/VehicleFact.json">src/Vehicle/VehicleFact.json</file>
+        <file alias="Vehicle/BatteryFact.json">src/Vehicle/BatteryFact.json</file>
+        <file alias="Vehicle/GPSFact.json">src/Vehicle/GPSFact.json</file>
     </qresource>
 </RCC>

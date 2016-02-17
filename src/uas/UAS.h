@@ -93,7 +93,6 @@ public:
     Q_PROPERTY(double   bearingToWaypoint       READ getBearingToWaypoint   WRITE setBearingToWaypoint  NOTIFY bearingToWaypointChanged)
     Q_PROPERTY(double   altitudeAMSL            READ getAltitudeAMSL        WRITE setAltitudeAMSL       NOTIFY altitudeAMSLChanged)
     Q_PROPERTY(double   altitudeAMSLFT          READ getAltitudeAMSLFT                                  NOTIFY altitudeAMSLFTChanged)
-    Q_PROPERTY(double   altitudeWGS84           READ getAltitudeWGS84       WRITE setAltitudeWGS84      NOTIFY altitudeWGS84Changed)
     Q_PROPERTY(double   altitudeRelative        READ getAltitudeRelative    WRITE setAltitudeRelative   NOTIFY altitudeRelativeChanged)
     Q_PROPERTY(double   satRawHDOP              READ getSatRawHDOP                                      NOTIFY satRawHDOPChanged)
     Q_PROPERTY(double   satRawVDOP              READ getSatRawVDOP                                      NOTIFY satRawVDOPChanged)
@@ -202,19 +201,6 @@ public:
     {
         return altitudeAMSLFT;
     }
-
-    void setAltitudeWGS84(double val)
-    {
-        altitudeWGS84 = val;
-        emit altitudeWGS84Changed(val, "altitudeWGS84");
-        emit valueChanged(this->uasId,"altitudeWGS84","m",QVariant(val),getUnixTime());
-    }
-
-    double getAltitudeWGS84() const
-    {
-        return altitudeWGS84;
-    }
-
 
     void setAltitudeRelative(double val)
     {
@@ -384,8 +370,6 @@ protected: //COMMENTS FOR TEST UNIT
     MAVLinkProtocol* mavlink;     ///< Reference to the MAVLink instance
     float receiveDropRate;        ///< Percentage of packets that were dropped on the MAV's receiving link (from GCS and other MAVs)
     float sendDropRate;           ///< Percentage of packets that were not received from the MAV by the GCS
-    quint64 lastHeartbeat;        ///< Time of the last heartbeat message
-    QTimer statusTimeout;       ///< Timer for various status timeouts
 
     /// BASIC UAS TYPE, NAME AND STATE
     uint8_t base_mode;                 ///< The current mode of the MAV
@@ -423,7 +407,6 @@ protected: //COMMENTS FOR TEST UNIT
     double manualThrust;        ///< Thrust set by human pilot (radians)
 
     /// POSITION
-    bool positionLock;          ///< Status if position information is available or not
     bool isGlobalPositionKnown; ///< If the global position has been received for this MAV
 
     double localX;
@@ -434,7 +417,6 @@ protected: //COMMENTS FOR TEST UNIT
     double longitude;           ///< Global longitude as estimated by position estimator
     double altitudeAMSL;        ///< Global altitude as estimated by position estimator, AMSL
     double altitudeAMSLFT;      ///< Global altitude as estimated by position estimator, AMSL
-    double altitudeWGS84;       ///< Global altitude as estimated by position estimator, WGS84
     double altitudeRelative;    ///< Altitude above home as estimated by position estimator
 
     double satRawHDOP;
@@ -471,7 +453,7 @@ protected: //COMMENTS FOR TEST UNIT
     /// IMAGING
     int imageSize;              ///< Image size being transmitted (bytes)
     int imagePackets;           ///< Number of data packets being sent for this image
-    int imagePacketsArrived;    ///< Number of data packets recieved
+    int imagePacketsArrived;    ///< Number of data packets received
     int imagePayload;           ///< Payload size per transmitted packet (bytes). Standard is 254, and decreases when image resolution increases.
     int imageQuality;           ///< Quality of the transmitted image (percentage)
     int imageType;              ///< Type of the transmitted image (BMP, PNG, JPEG, RAW 8 bit, RAW 32 bit)
@@ -591,9 +573,6 @@ public slots:
     /** @brief Receive a message from one of the communication links. */
     virtual void receiveMessage(mavlink_message_t message);
 
-    /** @brief Update the system state */
-    void updateState();
-
     void startCalibration(StartCalibrationType calType);
     void stopCalibration(void);
 
@@ -607,15 +586,11 @@ public slots:
     void unsetRCToParameterMap();
 signals:
     void loadChanged(UASInterface* uas, double load);
-    /** @brief Propagate a heartbeat received from the system */
-    //void heartbeat(UASInterface* uas); // Defined in UASInterface already
     void imageStarted(quint64 timestamp);
     /** @brief A new camera image has arrived */
     void imageReady(UASInterface* uas);
     /** @brief HIL controls have changed */
     void hilControlsChanged(quint64 time, float rollAilerons, float pitchElevator, float yawRudder, float throttle, quint8 systemMode, quint8 navMode);
-    /** @brief HIL actuator outputs have changed */
-    void hilActuatorsChanged(quint64 time, float act1, float act2, float act3, float act4, float act5, float act6, float act7, float act8);
 
     void localXChanged(double val,QString name);
     void localYChanged(double val,QString name);
@@ -624,7 +599,6 @@ signals:
     void latitudeChanged(double val,QString name);
     void altitudeAMSLChanged(double val,QString name);
     void altitudeAMSLFTChanged(double val,QString name);
-    void altitudeWGS84Changed(double val,QString name);
     void altitudeRelativeChanged(double val,QString name);
 
     void satRawHDOPChanged  (double value);

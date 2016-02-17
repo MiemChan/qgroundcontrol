@@ -87,13 +87,15 @@ LinkManager::LinkManager(QGCApplication* app)
     _autoconnectPixhawk =   settings.value(_autoconnectPixhawkKey, true).toBool();
     _autoconnect3DRRadio =  settings.value(_autoconnect3DRRadioKey, true).toBool();
     _autoconnectPX4Flow =   settings.value(_autoconnectPX4FlowKey, true).toBool();
+
+    _activeLinkCheckTimer.setInterval(_activeLinkCheckTimeoutMSecs);
+    _activeLinkCheckTimer.setSingleShot(false);
+    connect(&_activeLinkCheckTimer, &QTimer::timeout, this, &LinkManager::_activeLinkCheck);
 }
 
 LinkManager::~LinkManager()
 {
-    if (anyActiveLinks()) {
-        qWarning() << "Why are there still active links?";
-    }
+
 }
 
 void LinkManager::setToolbox(QGCToolbox *toolbox)
@@ -101,7 +103,6 @@ void LinkManager::setToolbox(QGCToolbox *toolbox)
    QGCTool::setToolbox(toolbox);
 
    _mavlinkProtocol = _toolbox->mavlinkProtocol();
-   connect(_mavlinkProtocol, &MAVLinkProtocol::vehicleHeartbeatInfo, this, &LinkManager::_vehicleHeartbeatInfo);
 
     connect(&_portListTimer, &QTimer::timeout, this, &LinkManager::_updateAutoConnectLinks);
     _portListTimer.start(_autoconnectUpdateTimerMSecs); // timeout must be long enough to get past bootloader on second pass
@@ -115,8 +116,19 @@ LinkInterface* LinkManager::createConnectedLink(LinkConfiguration* config)
     switch(config->type()) {
 #ifndef __ios__
         case LinkConfiguration::TypeSerial:
-            pLink = new SerialLink(dynamic_cast<SerialConfiguration*>(config));
-            break;
+        {
+            SerialConfiguration* serialConfig = dynamic_cast<SerialConfiguration*>(config);
+            if (serialConfig) {
+                pLink = new SerialLink(serialConfig);
+                if (serialConfig->usbDirect()) {
+                    _activeLinkCheckList.append(pLink);
+                    if (!_activeLinkCheckTimer.isActive()) {
+                        _activeLinkCheckTimer.start();
+                    }
+                }
+            }
+        }
+        break;
 #endif
         case LinkConfiguration::TypeUdp:
             pLink = new UDPLink(dynamic_cast<UDPConfiguration*>(config));
@@ -173,14 +185,21 @@ void LinkManager::_addLink(LinkInterface* link)
     }
 
     if (!_links.contains(link)) {
+        bool channelSet = false;
+
         // Find a mavlink channel to use for this link
         for (int i=0; i<32; i++) {
-            if (!(_mavlinkChannelsUsedBitMask && 1 << i)) {
+            if (!(_mavlinkChannelsUsedBitMask & 1 << i)) {
                 mavlink_reset_channel_status(i);
                 link->_setMavlinkChannel(i);
                 _mavlinkChannelsUsedBitMask |= i << i;
+                channelSet = true;
                 break;
             }
+        }
+
+        if (!channelSet) {
+            qWarning() << "Ran out of mavlink channels";
         }
 
         _links.append(link);
@@ -212,16 +231,7 @@ bool LinkManager::connectLink(LinkInterface* link)
         return false;
     }
 
-    bool previousAnyConnectedLinks = anyConnectedLinks();
-
-    if (link->_connect()) {
-        if (!previousAnyConnectedLinks) {
-            emit anyConnectedLinksChanged(true);
-        }
-        return true;
-    } else {
-        return false;
-    }
+    return link->_connect();
 }
 
 void LinkManager::disconnectLink(LinkInterface* link)
@@ -452,7 +462,7 @@ void LinkManager::_updateAutoConnectLinks(void)
             break;
         }
     }
-    if (!foundUDP) {
+    if (!foundUDP && _autoconnectUDP) {
         qCDebug(LinkManagerLog) << "New auto-connect UDP port added";
         UDPConfiguration* udpConfig = new UDPConfiguration(_defaultUPDLinkName);
         udpConfig->setLocalPort(QGC_UDP_LOCAL_PORT);
@@ -508,11 +518,13 @@ void LinkManager::_updateAutoConnectLinks(void)
                 case QGCSerialPortInfo::BoardTypePX4FMUV4:
                     if (_autoconnectPixhawk) {
                         pSerialConfig = new SerialConfiguration(QString("Pixhawk on %1").arg(portInfo.portName().trimmed()));
+                        pSerialConfig->setUsbDirect(true);
                     }
                     break;
                 case QGCSerialPortInfo::BoardTypeAeroCore:
                     if (_autoconnectPixhawk) {
                         pSerialConfig = new SerialConfiguration(QString("AeroCore on %1").arg(portInfo.portName().trimmed()));
+                        pSerialConfig->setUsbDirect(true);
                     }
                     break;
                 case QGCSerialPortInfo::BoardTypePX4Flow:
@@ -568,69 +580,6 @@ void LinkManager::_updateAutoConnectLinks(void)
         delete pDeleteConfig;
     }
 #endif // __ios__
-}
-
-bool LinkManager::anyConnectedLinks(void)
-{
-    bool found = false;
-    for (int i=0; i<_links.count(); i++) {
-        LinkInterface* link = _links.value<LinkInterface*>(i);
-
-        if (link && link->isConnected()) {
-            found = true;
-            break;
-        }
-    }
-    return found;
-}
-
-bool LinkManager::anyActiveLinks(void)
-{
-    bool found = false;
-    for (int i=0; i<_links.count(); i++) {
-        LinkInterface* link = _links.value<LinkInterface*>(i);
-
-        if (link && link->active()) {
-            found = true;
-            break;
-        }
-    }
-    return found;
-}
-
-void LinkManager::_vehicleHeartbeatInfo(LinkInterface* link, int vehicleId, int vehicleMavlinkVersion, int vehicleFirmwareType, int vehicleType)
-{
-    if (!link->active() && !_ignoreVehicleIds.contains(vehicleId)) {
-        qCDebug(LinkManagerLog) << "New heartbeat on link:vehicleId:vehicleMavlinkVersion:vehicleFirmwareType:vehicleType "
-                                << link->getName()
-                                << vehicleId
-                                << vehicleMavlinkVersion
-                                << vehicleFirmwareType
-                                << vehicleType;
-
-        if (vehicleId == _mavlinkProtocol->getSystemId()) {
-            _app->showMessage(QString("Warning: A vehicle is using the same system id as QGroundControl: %1").arg(vehicleId));
-        }
-
-        QSettings settings;
-        bool mavlinkVersionCheck = settings.value("VERSION_CHECK_ENABLED", true).toBool();
-        if (mavlinkVersionCheck && vehicleMavlinkVersion != MAVLINK_VERSION) {
-            _ignoreVehicleIds += vehicleId;
-            _app->showMessage(QString("The MAVLink protocol version on vehicle #%1 and QGroundControl differ! "
-                                                 "It is unsafe to use different MAVLink versions. "
-                                                 "QGroundControl therefore refuses to connect to vehicle #%1, which sends MAVLink version %2 (QGroundControl uses version %3).").arg(vehicleId).arg(vehicleMavlinkVersion).arg(MAVLINK_VERSION));
-            return;
-        }
-
-        bool previousAnyActiveLinks = anyActiveLinks();
-
-        link->setActive(true);
-        emit linkActive(link, vehicleId, vehicleFirmwareType, vehicleType);
-
-        if (!previousAnyActiveLinks) {
-            emit anyActiveLinksChanged(true);
-        }
-    }
 }
 
 void LinkManager::shutdown(void)
@@ -889,4 +838,32 @@ bool LinkManager::isAutoconnectLink(LinkInterface* link)
 bool LinkManager::isBluetoothAvailable(void)
 {
     return qgcApp()->isBluetoothAvailable();
+}
+
+void LinkManager::_activeLinkCheck(void)
+{
+    bool found = false;
+
+    if (_activeLinkCheckList.count() != 0) {
+        LinkInterface* link = _activeLinkCheckList.takeFirst();
+        if (_links.contains(link) && link->isConnected()) {
+            // Make sure there is a vehicle on the link
+            QmlObjectListModel* vehicles = _toolbox->multiVehicleManager()->vehicles();
+            for (int i=0; i<vehicles->count(); i++) {
+                Vehicle* vehicle = qobject_cast<Vehicle*>(vehicles->get(i));
+                if (vehicle->containsLink(link)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (_activeLinkCheckList.count() == 0) {
+        _activeLinkCheckTimer.stop();
+    }
+
+    if (!found) {
+        qgcApp()->showMessage("Your Vehicle is not responding. If this continues please check that you have an SD Card inserted and try again.");
+    }
 }

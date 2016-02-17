@@ -92,6 +92,7 @@ public:
     virtual void addMetaDataToFact(Fact* fact, MAV_TYPE vehicleType);
     virtual QString getDefaultComponentIdParam(void) const { return QString("SYSID_SW_TYPE"); }
     virtual QList<MAV_CMD> supportedMissionCommands(void);
+    void missionCommandOverrides(QString& commonJsonFilename, QString& fixedWingJsonFilename, QString& multiRotorJsonFilename) const final;
 
 protected:
     /// All access to singleton is through stack specific implementation
@@ -102,6 +103,8 @@ private:
     void _adjustSeverity(mavlink_message_t* message) const;
     void _adjustCalibrationMessageSeverity(mavlink_message_t* message) const;
     static bool _isTextSeverityAdjustmentNeeded(const APMFirmwareVersion& firmwareVersion);
+    void _setInfoSeverity(mavlink_message_t* message) const;
+    QString _getMessageText(mavlink_message_t* message) const;
 
     APMFirmwareVersion      _firmwareVersion;
     bool                    _textSeverityAdjustmentNeeded;

@@ -24,28 +24,28 @@
 #ifndef APMRadioComponent_H
 #define APMRadioComponent_H
 
-#include "APMComponent.h"
+#include "VehicleComponent.h"
 #include "Fact.h"
 
-class APMRadioComponent : public APMComponent
+class APMRadioComponent : public VehicleComponent
 {
     Q_OBJECT
     
 public:
     APMRadioComponent(Vehicle* vehicle, AutoPilotPlugin* autopilot, QObject* parent = NULL);
     
-    // Virtuals from PX4Component
-    virtual QStringList setupCompleteChangedTriggerList(void) const;
+    // Virtuals from VehicleComponent
+    QStringList setupCompleteChangedTriggerList(void) const final;
     
     // Virtuals from VehicleComponent
-    virtual QString name(void) const;
-    virtual QString description(void) const;
-    virtual QString iconResource(void) const;
-    virtual bool requiresSetup(void) const;
-    virtual bool setupComplete(void) const;
-    virtual QUrl setupSource(void) const;
-    virtual QUrl summaryQmlSource(void) const;
-    virtual QString prerequisiteSetup(void) const;
+    QString name(void) const final;
+    QString description(void) const final;
+    QString iconResource(void) const final;
+    bool requiresSetup(void) const final;
+    bool setupComplete(void) const final;
+    QUrl setupSource(void) const final;
+    QUrl summaryQmlSource(void) const final;
+    QString prerequisiteSetup(void) const final;
 
 private slots:
     void _triggerChanged(void);

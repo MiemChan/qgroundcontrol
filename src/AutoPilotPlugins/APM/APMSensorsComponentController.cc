@@ -77,6 +77,11 @@ APMSensorsComponentController::APMSensorsComponentController(void) :
     connect(_sensorsComponent, &VehicleComponent::setupCompleteChanged, this, &APMSensorsComponentController::setupNeededChanged);
 }
 
+APMSensorsComponentController::~APMSensorsComponentController()
+{
+    _vehicle->setConnectionLostEnabled(true);
+}
+
 /// Appends the specified text to the status log area in the ui
 void APMSensorsComponentController::_appendStatusLog(const QString& text)
 {
@@ -143,6 +148,10 @@ void APMSensorsComponentController::_resetInternalState(void)
 
 void APMSensorsComponentController::_stopCalibration(APMSensorsComponentController::StopCalibrationCode code)
 {
+    if (_accelCalInProgress) {
+        _vehicle->setConnectionLostEnabled(true);
+    }
+
     disconnect(_uas, &UASInterface::textMessageReceived, this, &APMSensorsComponentController::_handleUASTextMessage);
     
     _compassButton->setEnabled(true);
@@ -177,7 +186,7 @@ void APMSensorsComponentController::_stopCalibration(APMSensorsComponentControll
     default:
         // Assume failed
         _hideAllCalAreas();
-        qgcApp()->showMessage("Calibration failed. Calibration log will be displayed.");
+        qgcApp()->showMessage(QStringLiteral("Calibration failed. Calibration log will be displayed."));
         break;
     }
     
@@ -193,6 +202,7 @@ void APMSensorsComponentController::calibrateCompass(void)
 
 void APMSensorsComponentController::calibrateAccel(void)
 {
+    _vehicle->setConnectionLostEnabled(false);
     _startLogCalibration();
     _accelCalInProgress = true;
     _uas->startCalibration(UASInterface::StartCalibrationAccel);
@@ -209,11 +219,12 @@ void APMSensorsComponentController::_handleUASTextMessage(int uasId, int compId,
         return;
     }
 
-    if (text.startsWith("PreArm:") || text.startsWith("EKF") || text.startsWith("Arm") || text.startsWith("Initialising")) {
+    if (text.startsWith(QLatin1Literal("PreArm:")) || text.startsWith(QLatin1Literal("EKF"))
+            || text.startsWith(QLatin1Literal("Arm")) || text.startsWith(QLatin1Literal("Initialising"))) {
         return;
     }
 
-    if (text.contains("progress <")) {
+    if (text.contains(QLatin1Literal("progress <"))) {
         QString percent = text.split("<").last().split(">").first();
         bool ok;
         int p = percent.toInt(&ok);
@@ -224,39 +235,39 @@ void APMSensorsComponentController::_handleUASTextMessage(int uasId, int compId,
         return;
     }
 
-    QString anyKey("and press any");
+    QString anyKey(QStringLiteral("and press any"));
     if (text.contains(anyKey)) {
-        text = text.left(text.indexOf(anyKey)) + "and click Next to continue.";
+        text = text.left(text.indexOf(anyKey)) + QStringLiteral("and click Next to continue.");
         _nextButton->setEnabled(true);
     }
 
     _appendStatusLog(text);
     qCDebug(APMSensorsComponentControllerLog) << text << severity;
 
-    if (text.contains("Calibration successful")) {
+    if (text.contains(QLatin1String("Calibration successful"))) {
         _stopCalibration(StopCalibrationSuccess);
         return;
     }
 
-    if (text.contains("FAILED")) {
+    if (text.contains(QLatin1String("FAILED"))) {
         _stopCalibration(StopCalibrationFailed);
         return;
     }
 
     // All calibration messages start with [cal]
-    QString calPrefix("[cal] ");
+    QString calPrefix(QStringLiteral("[cal] "));
     if (!text.startsWith(calPrefix)) {
         return;
     }
     text = text.right(text.length() - calPrefix.length());
 
-    QString calStartPrefix("calibration started: ");
+    QString calStartPrefix(QStringLiteral("calibration started: "));
     if (text.startsWith(calStartPrefix)) {
         text = text.right(text.length() - calStartPrefix.length());
         
         _startVisualCalibration();
         
-        if (text == "accel" || text == "mag" || text == "gyro") {
+        if (text == QLatin1Literal("accel") || text == QLatin1Literal("mag") || text == QLatin1Literal("gyro")) {
             // Reset all progress indication
             _orientationCalDownSideDone = false;
             _orientationCalUpsideDownSideDone = false;
@@ -308,36 +319,36 @@ void APMSensorsComponentController::_handleUASTextMessage(int uasId, int compId,
         return;
     }
     
-    if (text.endsWith("orientation detected")) {
+    if (text.endsWith(QLatin1Literal("orientation detected"))) {
         QString side = text.section(" ", 0, 0);
         qDebug() << "Side started" << side;
         
-        if (side == "down") {
+        if (side == QLatin1Literal("down")) {
             _orientationCalDownSideInProgress = true;
             if (_magCalInProgress) {
                 _orientationCalDownSideRotate = true;
             }
-        } else if (side == "up") {
+        } else if (side == QLatin1Literal("up")) {
             _orientationCalUpsideDownSideInProgress = true;
             if (_magCalInProgress) {
                 _orientationCalUpsideDownSideRotate = true;
             }
-        } else if (side == "left") {
+        } else if (side == QLatin1Literal("left")) {
             _orientationCalLeftSideInProgress = true;
             if (_magCalInProgress) {
                 _orientationCalLeftSideRotate = true;
             }
-        } else if (side == "right") {
+        } else if (side == QLatin1Literal("right")) {
             _orientationCalRightSideInProgress = true;
             if (_magCalInProgress) {
                 _orientationCalRightSideRotate = true;
             }
-        } else if (side == "front") {
+        } else if (side == QLatin1Literal("front")) {
             _orientationCalNoseDownSideInProgress = true;
             if (_magCalInProgress) {
                 _orientationCalNoseDownSideRotate = true;
             }
-        } else if (side == "back") {
+        } else if (side == QLatin1Literal("back")) {
             _orientationCalTailDownSideInProgress = true;
             if (_magCalInProgress) {
                 _orientationCalTailDownSideRotate = true;
@@ -355,31 +366,31 @@ void APMSensorsComponentController::_handleUASTextMessage(int uasId, int compId,
         return;
     }
     
-    if (text.endsWith("side done, rotate to a different side")) {
+    if (text.endsWith(QLatin1Literal("side done, rotate to a different side"))) {
         QString side = text.section(" ", 0, 0);
         qDebug() << "Side finished" << side;
         
-        if (side == "down") {
+        if (side == QLatin1Literal("down")) {
             _orientationCalDownSideInProgress = false;
             _orientationCalDownSideDone = true;
             _orientationCalDownSideRotate = false;
-        } else if (side == "up") {
+        } else if (side == QLatin1Literal("up")) {
             _orientationCalUpsideDownSideInProgress = false;
             _orientationCalUpsideDownSideDone = true;
             _orientationCalUpsideDownSideRotate = false;
-        } else if (side == "left") {
+        } else if (side == QLatin1Literal("left")) {
             _orientationCalLeftSideInProgress = false;
             _orientationCalLeftSideDone = true;
             _orientationCalLeftSideRotate = false;
-        } else if (side == "right") {
+        } else if (side == QLatin1Literal("right")) {
             _orientationCalRightSideInProgress = false;
             _orientationCalRightSideDone = true;
             _orientationCalRightSideRotate = false;
-        } else if (side == "front") {
+        } else if (side == QLatin1Literal("front")) {
             _orientationCalNoseDownSideInProgress = false;
             _orientationCalNoseDownSideDone = true;
             _orientationCalNoseDownSideRotate = false;
-        } else if (side == "back") {
+        } else if (side == QLatin1Literal("back")) {
             _orientationCalTailDownSideInProgress = false;
             _orientationCalTailDownSideDone = true;
             _orientationCalTailDownSideRotate = false;
@@ -393,18 +404,17 @@ void APMSensorsComponentController::_handleUASTextMessage(int uasId, int compId,
         return;
     }
     
-    QString calCompletePrefix("calibration done:");
-    if (text.startsWith(calCompletePrefix)) {
+    if (text.startsWith(QLatin1Literal("calibration done:"))) {
         _stopCalibration(StopCalibrationSuccess);
         return;
     }
 
-    if (text.startsWith("calibration cancelled")) {
+    if (text.startsWith(QLatin1Literal("calibration cancelled"))) {
         _stopCalibration(_waitingForCancel ? StopCalibrationCancelled : StopCalibrationFailed);
         return;
     }
 
-    if (text.startsWith("calibration failed")) {
+    if (text.startsWith(QLatin1Literal("calibration failed"))) {
         _stopCalibration(StopCalibrationFailed);
         return;
     }
@@ -414,15 +424,15 @@ void APMSensorsComponentController::_refreshParams(void)
 {
     QStringList fastRefreshList;
     
-    fastRefreshList << "COMPASS_OFS_X" << "COMPASS_OFS_X" << "COMPASS_OFS_X"
-                    << "INS_ACCOFFS_X" << "INS_ACCOFFS_Y" << "INS_ACCOFFS_Z";
+    fastRefreshList << QStringLiteral("COMPASS_OFS_X") << QStringLiteral("COMPASS_OFS_X") << QStringLiteral("COMPASS_OFS_X")
+                    << QStringLiteral("INS_ACCOFFS_X") << QStringLiteral("INS_ACCOFFS_Y") << QStringLiteral("INS_ACCOFFS_Z");
     foreach (const QString &paramName, fastRefreshList) {
         _autopilot->refreshParameter(FactSystem::defaultComponentId, paramName);
     }
     
     // Now ask for all to refresh
-    _autopilot->refreshParametersPrefix(FactSystem::defaultComponentId, "COMPASS_");
-    _autopilot->refreshParametersPrefix(FactSystem::defaultComponentId, "INS_");
+    _autopilot->refreshParametersPrefix(FactSystem::defaultComponentId, QStringLiteral("COMPASS_"));
+    _autopilot->refreshParametersPrefix(FactSystem::defaultComponentId, QStringLiteral("INS_"));
 }
 
 bool APMSensorsComponentController::fixedWing(void)
